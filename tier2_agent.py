@@ -3,8 +3,10 @@ tier2_agent.py
 
 Tier 2 - slower, reasoning-based layer. SKELETON.
 
-What's implemented: consuming all four context topics, keeping a running
-per-patient state dict, and a trigger point where reasoning should happen.
+What's implemented: consuming all context topics (including Tier 1's
+own "alarms" output, so Tier 2 knows when Tier 1 has already fired --
+needed for S6), keeping a running per-patient state dict, and a
+trigger point where reasoning should happen.
 What's NOT implemented yet: the actual reasoning (LLM call / RAG lookup /
 severity-urgency mapping / network-request emission) - that's step 2.
 
@@ -37,6 +39,11 @@ def update_state(topic, event):
 
     if topic == "device-connectivity":
         state.setdefault("connectivity", {})[event["device_id"]] = bool(event.get("connected"))
+    elif topic == "alarms":
+        # Tier 1's own output. Tier 2 reads this -- never writes back to it --
+        # so it knows Tier 1 already fired (needed for S6: attach a confidence
+        # note, never suppress/delay/modify the alarm itself).
+        state.setdefault("alarms", []).append(event)
     else:
         state[topic] = event
 
@@ -70,14 +77,15 @@ def reason_about(pid):
 
 def main():
     consumer = KafkaConsumer(
-        "wearable-vitals", "smarthome-context", "device-connectivity", "patient-profile",
+        "wearable-vitals", "smarthome-context", "device-connectivity",
+        "patient-profile", "alarms",
         bootstrap_servers=BOOTSTRAP_SERVERS,
         group_id="tier2-reasoning-agent",
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
         auto_offset_reset="latest",
     )
 
-    print("Tier 2 running (skeleton). Listening on all four topics...")
+    print("Tier 2 running (skeleton). Listening on all topics, including alarms...")
 
     for msg in consumer:
         pid = update_state(msg.topic, msg.value)
