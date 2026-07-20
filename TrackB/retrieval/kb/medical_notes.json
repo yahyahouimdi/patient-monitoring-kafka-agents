@@ -10,5 +10,21 @@
 {
 "id": "M3",
 "text": "A fall combined with low oxygen saturation in an elderly patient may represent a high-risk event."
+},
+{
+  "id": "M4",
+  "text": "A hot room combined with a missed medication dose is a weak-signal combination: neither alone crosses an alarm threshold, but together, for a patient who is alone, they represent a meaningfully elevated risk."
+},
+{
+  "id": "M5",
+  "text": "Wearable fall sensors can fail to trigger during a real fall if the impact doesn't match the device's detection model. A heart-rate spike, a loud noise, or an unanswered check-in can indicate a likely fall even when the sensor itself stays silent."
+},
+{
+  "id": "M6",
+  "text": "A patient not responding to a voice check-in is a meaningful escalation signal, especially when paired with an unexpected vitals or audio reading in the same window."
+},
+{
+  "id": "M7",
+  "text": "A brief connectivity dropout at the same moment as an alarm-level reading does not invalidate it, but slightly reduces confidence. The correct response is to flag the reading as uncertain and request verification, never to suppress or delay the alarm."
 }
 ]

@@ -23,6 +23,7 @@ def load_documents():
     for p in profiles:
         docs.append({
             "id": p["patient_id"],
+            "patient_id": p["patient_id"],
             "text": p["text"]
         })
 
