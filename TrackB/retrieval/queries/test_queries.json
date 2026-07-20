@@ -1,0 +1,14 @@
+[
+{
+"query": "Patient P001 low oxygen relevant history",
+"expected": ["COPD", "lives alone"]
+},
+{
+"query": "What is bradycardia",
+"expected": ["heart rate below 60"]
+},
+{
+"query": "Fall and low SpO2 risk",
+"expected": ["high-risk event"]
+}
+]
