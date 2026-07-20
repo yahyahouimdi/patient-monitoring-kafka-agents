@@ -10,5 +10,21 @@
 {
 "query": "Fall and low SpO2 risk",
 "expected": ["high-risk event"]
+},
+{
+  "query": "Why would a hot room and a missed medication dose matter together?",
+  "expected": ["weak-signal combination", "elevated risk"]
+},
+{
+  "query": "Can a real fall happen without the fall sensor triggering?",
+  "expected": ["fall sensors can fail", "corroborating evidence"]
+},
+{
+  "query": "What does it mean if a patient doesn't respond to a check-in?",
+  "expected": ["escalation signal"]
+},
+{
+  "query": "Should an alarm be suppressed if connectivity drops briefly?",
+  "expected": ["never suppress", "flag as uncertain"]
 }
 ]
