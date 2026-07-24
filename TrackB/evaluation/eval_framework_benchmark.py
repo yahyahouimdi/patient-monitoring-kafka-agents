@@ -40,6 +40,7 @@ flag this explicitly as a limitation in the report rather than
 treating the scores as ground truth.
 """
 
+import asyncio
 import csv
 import sys
 import time
@@ -48,8 +49,16 @@ from pathlib import Path
 
 import requests
 
+# Windows' default ProactorEventLoop is incompatible with ragas's internal
+# asyncio timeout handling (causes "RuntimeError: Timeout should be used
+# inside a task" and silently nan's out every score). Must be set before
+# any event loop is created, hence right after stdlib imports.
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 BASE = Path(__file__).parent
-sys.path.insert(0, str(BASE))  # so `from loader import ...` finds loader.py next to this file
+RETRIEVAL_DIR = BASE.parent / "retrieval"  # loader.py lives in the sibling retrieval/ folder
+sys.path.insert(0, str(RETRIEVAL_DIR))
 
 from loader import load_documents, load_queries  # noqa: E402
 
@@ -142,9 +151,10 @@ def build_eval_cases():
 
 def run_ragas(cases):
     from datasets import Dataset
-    from langchain_community.chat_models import ChatOllama
+    from langchain_ollama import ChatOllama
     from langchain_community.embeddings import HuggingFaceEmbeddings
     from ragas import evaluate
+    from ragas.run_config import RunConfig
     from ragas.llms import LangchainLLMWrapper
     from ragas.embeddings import LangchainEmbeddingsWrapper
     from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
@@ -155,39 +165,34 @@ def run_ragas(cases):
     )
 
     dataset = Dataset.from_list([
-        {
-            "question": c["question"],
-            "contexts": c["contexts"],
-            "answer": c["answer"],
-            "ground_truth": c["ground_truth"],
-        }
+        {"question": c["question"], "contexts": c["contexts"],
+         "answer": c["answer"], "ground_truth": c["ground_truth"]}
         for c in cases
     ])
 
-    metric_specs = [
-        ("faithfulness", faithfulness, False),
-        ("answer_relevancy", answer_relevancy, False),
-        ("context_precision", context_precision, True),
-        ("context_recall", context_recall, True),
-    ]
+    metrics = [faithfulness, answer_relevancy, context_precision, context_recall]
 
+    start = time.perf_counter()
+    result = evaluate(
+        dataset,
+        metrics=metrics,
+        llm=judge_llm,
+        embeddings=judge_embeddings,
+        run_config=RunConfig(raise_exceptions=True, max_workers=1),  # surface real errors, run serially
+    )
+    elapsed = time.perf_counter() - start
+
+    df = result.to_pandas()
     rows = []
-    for name, metric_fn, needs_ref in metric_specs:
-        metric_fn.llm = judge_llm
-        if hasattr(metric_fn, "embeddings"):
-            metric_fn.embeddings = judge_embeddings
-
-        start = time.perf_counter()
-        result = evaluate(dataset, metrics=[metric_fn], llm=judge_llm, embeddings=judge_embeddings)
-        elapsed = time.perf_counter() - start
-
-        df = result.to_pandas()
-        avg_score = float(df[name].mean())
+    for name, needs_ref in [
+        ("faithfulness", False), ("answer_relevancy", False),
+        ("context_precision", True), ("context_recall", True),
+    ]:
         rows.append({
             "framework": "RAGAS", "metric": name, "requires_reference": needs_ref,
-            "score": round(avg_score, 4), "case_count": len(cases),
-            "eval_time_s": round(elapsed, 4), "judge_model": OLLAMA_MODEL,
-            "recorded_at": now(),
+            "score": round(float(df[name].mean()), 4),
+            "case_count": len(cases), "eval_time_s": round(elapsed, 4),
+            "judge_model": OLLAMA_MODEL, "recorded_at": now(),
         })
     return rows
 
@@ -210,7 +215,15 @@ class OllamaJudge:
     def generate(self, prompt: str) -> str:
         resp = requests.post(
             f"{self.base_url}/api/generate",
-            json={"model": self.model_name, "prompt": prompt, "stream": False},
+            json={
+                "model": self.model_name,
+                "prompt": prompt,
+                "stream": False,
+                "format": "json",          # constrain decoding to valid JSON -- small
+                                            # models fail free-form "output JSON" instructions
+                                            # far more often than format-constrained ones
+                "options": {"temperature": 0},  # deterministic, reduces malformed output
+            },
             timeout=120,
         )
         resp.raise_for_status()
