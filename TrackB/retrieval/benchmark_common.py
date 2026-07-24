@@ -44,13 +44,13 @@ def ensure_results_file() -> None:
 
 
 def load_documents():
-    from loader import load_documents
+    from TrackB.retrieval.loader import load_documents
 
     return load_documents()
 
 
 def load_queries():
-    from loader import load_queries
+    from TrackB.retrieval.loader import load_queries
 
     return load_queries()
 

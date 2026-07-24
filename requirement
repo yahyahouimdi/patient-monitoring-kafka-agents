@@ -1,1 +1,4 @@
- kafka-python --break-system-packages
+fastapi
+uvicorn[standard]
+qdrant-client
+requests
