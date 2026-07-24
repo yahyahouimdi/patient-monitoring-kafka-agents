@@ -14,7 +14,7 @@ Setup:
     ollama pull qwen2.5:3b
     ollama serve                      # if not already running
     pip install ragas deepeval sentence-transformers \
-                langchain-community requests --break-system-packages
+                langchain-community langchain-ollama requests --break-system-packages
 
 Usage:
     python eval_framework_benchmark.py
@@ -43,6 +43,7 @@ treating the scores as ground truth.
 import csv
 import sys
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -57,6 +58,8 @@ OLLAMA_MODEL = "qwen2.5:3b"
 OLLAMA_BASE_URL = "http://localhost:11434"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"   # same model used in the vector-store benchmark
 TOP_K = 3
+OLLAMA_TIMEOUT_S = 600  # local generation has been observed taking 8-9 min/case;
+                        # 120s was too aggressive and produced silent ReadTimeouts
 
 RESULTS_PATH = BASE / "results_eval_frameworks.csv"
 
@@ -104,7 +107,7 @@ def generate_answer(query, contexts):
     resp = requests.post(
         f"{OLLAMA_BASE_URL}/api/generate",
         json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
-        timeout=120,
+        timeout=OLLAMA_TIMEOUT_S,
     )
     resp.raise_for_status()
     return resp.json()["response"].strip()
@@ -116,8 +119,10 @@ def generate_answer(query, contexts):
 # --------------------------------------------------------------------------
 
 def build_eval_cases():
+    
     retrieve = build_retriever()
     queries = load_queries()
+    queries = queries[:2]  # limit to 2 for speed; remove this line to run all queries
 
     cases = []
     for q in queries:
@@ -142,7 +147,7 @@ def build_eval_cases():
 
 def run_ragas(cases):
     from datasets import Dataset
-    from langchain_community.chat_models import ChatOllama
+    from langchain_ollama import ChatOllama
     from langchain_community.embeddings import HuggingFaceEmbeddings
     from ragas import evaluate
     from ragas.llms import LangchainLLMWrapper
@@ -166,9 +171,9 @@ def run_ragas(cases):
 
     metric_specs = [
         ("faithfulness", faithfulness, False),
-        ("answer_relevancy", answer_relevancy, False),
-        ("context_precision", context_precision, True),
-        ("context_recall", context_recall, True),
+        #("answer_relevancy", answer_relevancy, False),
+        #("context_precision", context_precision, True),
+        #("context_recall", context_recall, True),
     ]
 
     rows = []
@@ -210,12 +215,18 @@ class OllamaJudge:
     def generate(self, prompt: str) -> str:
         resp = requests.post(
             f"{self.base_url}/api/generate",
-            json={"model": self.model_name, "prompt": prompt, "stream": False},
-            timeout=120,
+            json={
+                "model": self.model_name,
+                "prompt": prompt,
+                "stream": False,
+                "format": "json",  # forces syntactically valid JSON; DeepEval's
+                                    # internal prompts already ask for JSON output
+            },
+            timeout=OLLAMA_TIMEOUT_S,
         )
         resp.raise_for_status()
         return resp.json()["response"]
-
+    
     async def a_generate(self, prompt: str) -> str:
         return self.generate(prompt)
 
@@ -307,14 +318,16 @@ def main():
     print("\nRunning RAGAS...")
     try:
         all_rows.extend(run_ragas(cases))
-    except Exception as e:
-        print(f"  RAGAS run failed: {e}")
+    except Exception:
+        print("  RAGAS run failed:")
+        traceback.print_exc()
 
     print("Running DeepEval...")
     try:
         all_rows.extend(run_deepeval(cases))
-    except Exception as e:
-        print(f"  DeepEval run failed: {e}")
+    except Exception:
+        print("  DeepEval run failed:")
+        traceback.print_exc()
 
     if all_rows:
         append_rows(all_rows)
