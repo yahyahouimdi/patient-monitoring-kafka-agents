@@ -171,9 +171,9 @@ def run_ragas(cases):
 
     metric_specs = [
         ("faithfulness", faithfulness, False),
-        #("answer_relevancy", answer_relevancy, False),
-        #("context_precision", context_precision, True),
-        #("context_recall", context_recall, True),
+        ("answer_relevancy", answer_relevancy, False),
+        ("context_precision", context_precision, True),
+        ("context_recall", context_recall, True),
     ]
 
     rows = []
