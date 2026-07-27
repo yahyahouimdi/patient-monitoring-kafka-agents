@@ -20,3 +20,6 @@ httpx
 ruff
 black
 mypy
+
+# orchestration frameworks (choose one for Phase 1)
+langgraph
