@@ -53,7 +53,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
 from loader import load_documents
-from benchmark_common import load_embedding_model, encode_texts
+from retrieval.benchmark_common import load_embedding_model, encode_texts
 
 # --- Config -------------------------------------------------------------
 
