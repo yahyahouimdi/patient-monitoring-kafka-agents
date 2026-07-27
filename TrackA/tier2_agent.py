@@ -1,26 +1,29 @@
 """
 tier2_agent.py
 
-Tier 2 - slower, reasoning-based layer. SKELETON.
+Tier 2 - slower, reasoning-based layer.
 
-What's implemented: consuming all context topics (including Tier 1's
-own "alarms" output, so Tier 2 knows when Tier 1 has already fired --
-needed for S6), keeping a running per-patient state dict, and a
-trigger point where reasoning should happen.
-What's NOT implemented yet: the actual reasoning (LLM call / RAG lookup /
-severity-urgency mapping / network-request emission) - that's step 2.
+update_state() and main() are unchanged from the original skeleton.
+should_reason_about() and reason_about() are now implemented, delegating
+to shared/ (framework-agnostic) and langgraph_impl/ (the chosen
+orchestration framework -- swap this import for another *_impl/ package
+to run a different Phase 1 candidate; nothing else in this file changes).
 
 Usage:
-    pip install kafka-python --break-system-packages
+    pip install kafka-python requests langgraph --break-system-packages
     python tier2_agent.py
 """
 
 import json
 from datetime import datetime, timezone
+from kafka import KafkaConsumer, KafkaProducer
 
-from kafka import KafkaConsumer
+from TrackA.shared.config import settings
+from TrackA.shared.schemas import PatientState
+from TrackA.shared import gate as gate_module
+from TrackA.langgraph_impl.graph import run_pipeline
 
-BOOTSTRAP_SERVERS = "localhost:9092"
+BOOTSTRAP_SERVERS = settings.BOOTSTRAP_SERVERS
 
 # patient_id -> merged latest known state across all topics
 patient_state = {}
@@ -53,26 +56,24 @@ def update_state(topic, event):
 
 
 def should_reason_about(pid):
-    """
-    TODO: decide when it's worth invoking Tier 2 reasoning for this patient.
-    E.g. only when enough context has accumulated, or when Tier 1 has
-    already raised something and Tier 2 needs to add context (S6), or
-    when weak-signal combinations appear (S4/S5).
-    For now this is a placeholder that never triggers -- replace it.
-    """
-    return False
+    """Deterministic gate -- delegates to shared/gate.py, the same logic
+    every Phase 1 framework candidate would use."""
+    ps = PatientState.from_merged_dict(pid, patient_state[pid])
+    return gate_module.should_reason_about(ps)
 
 
 def reason_about(pid):
-    """
-    TODO: this is where the actual Tier 2 logic goes:
-      - retrieve relevant background (RAG call to the retrieval service)
-      - build a prompt describing the current merged patient_state[pid]
-      - call the reasoning model
-      - map its judgment to a severity/urgency level (see guide, section 7)
-      - emit a network-request description (to a topic and/or log file)
-    """
-    raise NotImplementedError("Tier 2 reasoning not implemented yet")
+    """Runs retrieval -> reasoning -> guardrail -> emission via the
+    compiled LangGraph pipeline. The only line that would change to
+    benchmark a different framework is the import above."""
+    run_pipeline(pid, patient_state[pid], producer=producer)
+
+
+producer = KafkaProducer(
+    bootstrap_servers=BOOTSTRAP_SERVERS,
+    key_serializer=lambda k: k.encode("utf-8"),
+    value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+)
 
 
 def main():
@@ -84,14 +85,11 @@ def main():
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
         auto_offset_reset="latest",
     )
-
-    print("Tier 2 running (skeleton). Listening on all topics, including alarms...")
-
+    print("Tier 2 running. Listening on all topics, including alarms...")
     for msg in consumer:
         pid = update_state(msg.topic, msg.value)
         if pid is None:
             continue
-
         if should_reason_about(pid):
             reason_about(pid)
 

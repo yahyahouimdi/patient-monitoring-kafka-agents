@@ -93,3 +93,63 @@ docker compose down
 - Tier 2 is currently a scaffold and is intended for future reasoning, retrieval, or LLM-based enhancements.
 - The main event topics are defined in kafka/Create_topics.py and are used by both agent tiers.
 - The TrackB directory contains evaluation and retrieval benchmarking components that can be used for experiment analysis.
+
+
+# Running the Project
+
+Before running the project, make sure you have activated the virtual environment and started all required services (Kafka, Ollama, etc.).
+
+## 1. Run Tier 2
+
+From the project root, execute:
+
+```bash
+py -m TrackA.tier2_agent
+```
+
+---
+
+## 2. Run Tier 1
+
+Navigate to the `tiers` directory and run the Tier 1 agent:
+
+```bash
+cd tiers
+py tier1_agent.py
+```
+
+---
+
+## 3. Send Test Scenarios
+
+To publish the predefined Kafka scenarios, navigate to the `kafka` directory and run:
+
+```bash
+cd kafka
+py fixtures.py
+```
+
+---
+
+## Execution Order
+
+Run the components in the following order:
+
+1. Start the required services (Kafka, Ollama, etc.).
+2. Launch **Tier 2**:
+   ```bash
+   py -m TrackA.tier2_agent
+   ```
+3. Launch **Tier 1**:
+   ```bash
+   cd tiers
+   py tier1_agent.py
+   ```
+4. Publish the test scenarios:
+   ```bash
+   cd kafka
+   py fixtures.py
+   ```
+
+The system is now ready to process the incoming scenarios.
+

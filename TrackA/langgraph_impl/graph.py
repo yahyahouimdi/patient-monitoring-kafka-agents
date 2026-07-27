@@ -9,10 +9,11 @@ shared/, so a future crewai_impl/crew.py would read almost identically,
 just with CrewAI's Agent/Task/Crew objects instead of StateGraph nodes.
 """
 from typing import TypedDict, Optional
+from TrackA.shared import emission, gate, guardrail, reasoning_client
 from langgraph.graph import StateGraph, END
 
-from shared.schemas import PatientState, ReasoningResult, NetworkRequest
-from shared import gate, retrieval_client, reasoning_client, guardrail, emission
+from TrackA.shared.schemas import PatientState, ReasoningResult, NetworkRequest
+from TrackA.shared import retrieval_client
 
 
 class GraphState(TypedDict):
