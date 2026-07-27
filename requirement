@@ -1,4 +1,22 @@
+# pyright: reportUndefinedVariable=false, reportGeneralTypeIssues=false
+# Core runtime dependencies
 fastapi
 uvicorn[standard]
-qdrant-client
+pydantic
 requests
+kafka-python
+numpy
+sentence-transformers
+qdrant-client
+
+# Optional vector-store backends used by TrackB benchmarks
+chromadb
+faiss-cpu
+
+# Testing and development tools
+pytest
+pytest-cov
+httpx
+ruff
+black
+mypy
