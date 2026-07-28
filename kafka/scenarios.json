@@ -44,7 +44,7 @@
   "S4": {
     "description": "Heat + missed medication + alone: HR mildly elevated (kept below Tier-1 thresholds on purpose), hot room, dose missed, patient alone -> rule table says NORMAL, reasoning tier should say MODERATE/watch-closely",
     "expected_rule_table": "normal",
-    "expected_reasoning": "moderate_watch",
+    "expected_reasoning": "moderate",
     "events": [
       {"topic": "smarthome-context", "delay": 0.0,
         "payload": {"alone": 1, "presence_room": "bedroom", "dose_taken": 0,

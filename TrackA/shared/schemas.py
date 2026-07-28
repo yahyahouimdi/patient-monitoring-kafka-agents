@@ -9,7 +9,7 @@ shapes, and every function in shared/, do not.
 from dataclasses import dataclass, field
 from typing import Optional, Literal
 
-Severity = Literal["normal", "moderate", "moderate_watch", "high", "critical"]
+Severity = Literal["normal", "moderate", "high", "critical"]
 
 
 @dataclass
