@@ -27,6 +27,7 @@ def build_network_request(state: PatientState, result: ReasoningResult, reason: 
         severity=result.severity,
         connection_type=SEVERITY_TO_CONNECTION[result.severity],
         reason=reason,
+        confidence=result.confidence,
         note=result.note,
         timestamp=now(),
     )
@@ -45,6 +46,7 @@ def emit(producer, request: NetworkRequest) -> None:
             "severity": request.severity,
             "connection_type": request.connection_type,
             "reason": request.reason,
+            "confidence": request.confidence,
             "note": request.note,
             "timestamp": request.timestamp,
         },

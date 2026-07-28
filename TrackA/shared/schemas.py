@@ -84,5 +84,6 @@ class NetworkRequest:
     severity: Severity
     connection_type: str
     reason: str
+    confidence: Literal["confirmed", "uncertain_connectivity_drop"] = "confirmed"
     note: str = ""
     timestamp: str = ""
