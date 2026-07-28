@@ -11,13 +11,13 @@ import json
 import requests
 from .config import settings
 
-VALID_SEVERITIES = {"normal", "moderate_watch", "moderate", "high", "critical"}
+VALID_SEVERITIES = {"normal", "moderate", "high", "critical"}
 
 SYSTEM_PROMPT = (
     "You are a clinical triage assistant for a home patient-monitoring "
     "system. Given a short situation narrative and retrieved patient "
     "background, output ONLY a JSON object with exactly these keys: "
-    '"severity" (one of: normal, moderate_watch, moderate, high, critical), '
+    '"severity" (one of: normal, moderate, high, critical), '
     '"note" (a short, under-20-word justification). '
     "Never invent readings that are not present in the narrative."
 )
