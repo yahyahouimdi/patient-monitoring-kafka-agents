@@ -1,0 +1,602 @@
+[
+  {
+    "id": "P0001-profile",
+    "patient_id": "P0001",
+    "type": "patient-profile",
+    "text": "Patient P0001 is 64 years old, has type 2 diabetes, and lives with family."
+  },
+  {
+    "id": "P0001-note",
+    "patient_id": "P0001",
+    "type": "medical-note",
+    "text": "Medical note 0001 for P0001: heart rate was 106 bpm after standing up quickly. Bradycardia in a frail older adult may require clinical review."
+  },
+  {
+    "id": "P0002-profile",
+    "patient_id": "P0002",
+    "type": "patient-profile",
+    "text": "Patient P0002 is 65 years old, has mild heart failure, and receives daily caregiver visits."
+  },
+  {
+    "id": "P0002-note",
+    "patient_id": "P0002",
+    "type": "medical-note",
+    "text": "Medical note 0002 for P0002: body temperature reached 38.2 C during the evening check. Repeated borderline oxygen readings should be monitored closely."
+  },
+  {
+    "id": "P0003-profile",
+    "patient_id": "P0003",
+    "type": "patient-profile",
+    "text": "Patient P0003 is 73 years old, has hypertension, and has overnight support from a relative."
+  },
+  {
+    "id": "P0003-note",
+    "patient_id": "P0003",
+    "type": "medical-note",
+    "text": "Medical note 0003 for P0003: blood pressure was low and the patient felt weak and unsteady. Missed medication and worsening fatigue may increase support needs."
+  },
+  {
+    "id": "P0004-profile",
+    "patient_id": "P0004",
+    "type": "patient-profile",
+    "text": "Patient P0004 is 62 years old, has atrial fibrillation, and lives in an assisted living apartment."
+  },
+  {
+    "id": "P0004-note",
+    "patient_id": "P0004",
+    "type": "medical-note",
+    "text": "Medical note 0004 for P0004: the patient had mild shortness of breath while walking to the bathroom. Room isolation plus low SpO2 can be concerning in a patient who lives alone."
+  },
+  {
+    "id": "P0005-profile",
+    "patient_id": "P0005",
+    "type": "patient-profile",
+    "text": "Patient P0005 is 81 years old, has asthma, and lives alone."
+  },
+  {
+    "id": "P0005-note",
+    "patient_id": "P0005",
+    "type": "medical-note",
+    "text": "Medical note 0005 for P0005: the patient reported chest discomfort and fatigue after taking a short walk. Persistent weakness after mobility activity may suggest deconditioning."
+  },
+  {
+    "id": "P0006-profile",
+    "patient_id": "P0006",
+    "type": "patient-profile",
+    "text": "Patient P0006 is 69 years old, has chronic kidney disease, and lives with family."
+  },
+  {
+    "id": "P0006-note",
+    "patient_id": "P0006",
+    "type": "medical-note",
+    "text": "Medical note 0006 for P0006: the patient had an irregular pulse with intermittent palpitations. A fall combined with low oxygen saturation may indicate a high-risk event."
+  },
+  {
+    "id": "P0007-profile",
+    "patient_id": "P0007",
+    "type": "patient-profile",
+    "text": "Patient P0007 is 64 years old, has frailty, and receives daily caregiver visits."
+  },
+  {
+    "id": "P0007-note",
+    "patient_id": "P0007",
+    "type": "medical-note",
+    "text": "Medical note 0007 for P0007: the patient had poor sleep and reduced appetite over the last 24 hours. Bradycardia in a frail older adult may require clinical review."
+  },
+  {
+    "id": "P0008-profile",
+    "patient_id": "P0008",
+    "type": "patient-profile",
+    "text": "Patient P0008 is 73 years old, has COPD, and has overnight support from a relative."
+  },
+  {
+    "id": "P0008-note",
+    "patient_id": "P0008",
+    "type": "medical-note",
+    "text": "Medical note 0008 for P0008: oxygen saturation dropped to 97% and the patient reported dizziness. Repeated borderline oxygen readings should be monitored closely."
+  },
+  {
+    "id": "P0009-profile",
+    "patient_id": "P0009",
+    "type": "patient-profile",
+    "text": "Patient P0009 is 74 years old, has type 2 diabetes, and lives in an assisted living apartment."
+  },
+  {
+    "id": "P0009-note",
+    "patient_id": "P0009",
+    "type": "medical-note",
+    "text": "Medical note 0009 for P0009: heart rate was 83 bpm after standing up quickly. Missed medication and worsening fatigue may increase support needs."
+  },
+  {
+    "id": "P0010-profile",
+    "patient_id": "P0010",
+    "type": "patient-profile",
+    "text": "Patient P0010 is 86 years old, has mild heart failure, and lives alone."
+  },
+  {
+    "id": "P0010-note",
+    "patient_id": "P0010",
+    "type": "medical-note",
+    "text": "Medical note 0010 for P0010: body temperature reached 38.7 C during the evening check. Room isolation plus low SpO2 can be concerning in a patient who lives alone."
+  },
+  {
+    "id": "P0011-profile",
+    "patient_id": "P0011",
+    "type": "patient-profile",
+    "text": "Patient P0011 is 80 years old, has hypertension, and lives with family."
+  },
+  {
+    "id": "P0011-note",
+    "patient_id": "P0011",
+    "type": "medical-note",
+    "text": "Medical note 0011 for P0011: blood pressure was low and the patient felt weak and unsteady. Persistent weakness after mobility activity may suggest deconditioning."
+  },
+  {
+    "id": "P0012-profile",
+    "patient_id": "P0012",
+    "type": "patient-profile",
+    "text": "Patient P0012 is 72 years old, has atrial fibrillation, and receives daily caregiver visits."
+  },
+  {
+    "id": "P0012-note",
+    "patient_id": "P0012",
+    "type": "medical-note",
+    "text": "Medical note 0012 for P0012: the patient had mild shortness of breath while walking to the bathroom. A fall combined with low oxygen saturation may indicate a high-risk event."
+  },
+  {
+    "id": "P0013-profile",
+    "patient_id": "P0013",
+    "type": "patient-profile",
+    "text": "Patient P0013 is 65 years old, has asthma, and has overnight support from a relative."
+  },
+  {
+    "id": "P0013-note",
+    "patient_id": "P0013",
+    "type": "medical-note",
+    "text": "Medical note 0013 for P0013: the patient reported chest discomfort and fatigue after taking a short walk. Bradycardia in a frail older adult may require clinical review."
+  },
+  {
+    "id": "P0014-profile",
+    "patient_id": "P0014",
+    "type": "patient-profile",
+    "text": "Patient P0014 is 67 years old, has chronic kidney disease, and lives in an assisted living apartment."
+  },
+  {
+    "id": "P0014-note",
+    "patient_id": "P0014",
+    "type": "medical-note",
+    "text": "Medical note 0014 for P0014: the patient had an irregular pulse with intermittent palpitations. Repeated borderline oxygen readings should be monitored closely."
+  },
+  {
+    "id": "P0015-profile",
+    "patient_id": "P0015",
+    "type": "patient-profile",
+    "text": "Patient P0015 is 77 years old, has frailty, and lives alone."
+  },
+  {
+    "id": "P0015-note",
+    "patient_id": "P0015",
+    "type": "medical-note",
+    "text": "Medical note 0015 for P0015: the patient had poor sleep and reduced appetite over the last 24 hours. Missed medication and worsening fatigue may increase support needs."
+  },
+  {
+    "id": "P0016-profile",
+    "patient_id": "P0016",
+    "type": "patient-profile",
+    "text": "Patient P0016 is 82 years old, has COPD, and lives with family."
+  },
+  {
+    "id": "P0016-note",
+    "patient_id": "P0016",
+    "type": "medical-note",
+    "text": "Medical note 0016 for P0016: oxygen saturation dropped to 93% and the patient reported dizziness. Room isolation plus low SpO2 can be concerning in a patient who lives alone."
+  },
+  {
+    "id": "P0017-profile",
+    "patient_id": "P0017",
+    "type": "patient-profile",
+    "text": "Patient P0017 is 82 years old, has type 2 diabetes, and receives daily caregiver visits."
+  },
+  {
+    "id": "P0017-note",
+    "patient_id": "P0017",
+    "type": "medical-note",
+    "text": "Medical note 0017 for P0017: heart rate was 91 bpm after standing up quickly. Persistent weakness after mobility activity may suggest deconditioning."
+  },
+  {
+    "id": "P0018-profile",
+    "patient_id": "P0018",
+    "type": "patient-profile",
+    "text": "Patient P0018 is 70 years old, has mild heart failure, and has overnight support from a relative."
+  },
+  {
+    "id": "P0018-note",
+    "patient_id": "P0018",
+    "type": "medical-note",
+    "text": "Medical note 0018 for P0018: body temperature reached 39.2 C during the evening check. A fall combined with low oxygen saturation may indicate a high-risk event."
+  },
+  {
+    "id": "P0019-profile",
+    "patient_id": "P0019",
+    "type": "patient-profile",
+    "text": "Patient P0019 is 72 years old, has hypertension, and lives in an assisted living apartment."
+  },
+  {
+    "id": "P0019-note",
+    "patient_id": "P0019",
+    "type": "medical-note",
+    "text": "Medical note 0019 for P0019: blood pressure was low and the patient felt weak and unsteady. Bradycardia in a frail older adult may require clinical review."
+  },
+  {
+    "id": "P0020-profile",
+    "patient_id": "P0020",
+    "type": "patient-profile",
+    "text": "Patient P0020 is 88 years old, has atrial fibrillation, and lives alone."
+  },
+  {
+    "id": "P0020-note",
+    "patient_id": "P0020",
+    "type": "medical-note",
+    "text": "Medical note 0020 for P0020: the patient had mild shortness of breath while walking to the bathroom. Repeated borderline oxygen readings should be monitored closely."
+  },
+  {
+    "id": "P0021-profile",
+    "patient_id": "P0021",
+    "type": "patient-profile",
+    "text": "Patient P0021 is 87 years old, has asthma, and lives with family."
+  },
+  {
+    "id": "P0021-note",
+    "patient_id": "P0021",
+    "type": "medical-note",
+    "text": "Medical note 0021 for P0021: the patient reported chest discomfort and fatigue after taking a short walk. Missed medication and worsening fatigue may increase support needs."
+  },
+  {
+    "id": "P0022-profile",
+    "patient_id": "P0022",
+    "type": "patient-profile",
+    "text": "Patient P0022 is 76 years old, has chronic kidney disease, and receives daily caregiver visits."
+  },
+  {
+    "id": "P0022-note",
+    "patient_id": "P0022",
+    "type": "medical-note",
+    "text": "Medical note 0022 for P0022: the patient had an irregular pulse with intermittent palpitations. Room isolation plus low SpO2 can be concerning in a patient who lives alone."
+  },
+  {
+    "id": "P0023-profile",
+    "patient_id": "P0023",
+    "type": "patient-profile",
+    "text": "Patient P0023 is 68 years old, has frailty, and has overnight support from a relative."
+  },
+  {
+    "id": "P0023-note",
+    "patient_id": "P0023",
+    "type": "medical-note",
+    "text": "Medical note 0023 for P0023: the patient had poor sleep and reduced appetite over the last 24 hours. Persistent weakness after mobility activity may suggest deconditioning."
+  },
+  {
+    "id": "P0024-profile",
+    "patient_id": "P0024",
+    "type": "patient-profile",
+    "text": "Patient P0024 is 87 years old, has COPD, and lives in an assisted living apartment."
+  },
+  {
+    "id": "P0024-note",
+    "patient_id": "P0024",
+    "type": "medical-note",
+    "text": "Medical note 0024 for P0024: oxygen saturation dropped to 89% and the patient reported dizziness. A fall combined with low oxygen saturation may indicate a high-risk event."
+  },
+  {
+    "id": "P0025-profile",
+    "patient_id": "P0025",
+    "type": "patient-profile",
+    "text": "Patient P0025 is 68 years old, has type 2 diabetes, and lives alone."
+  },
+  {
+    "id": "P0025-note",
+    "patient_id": "P0025",
+    "type": "medical-note",
+    "text": "Medical note 0025 for P0025: heart rate was 63 bpm after standing up quickly. Bradycardia in a frail older adult may require clinical review."
+  },
+  {
+    "id": "P0026-profile",
+    "patient_id": "P0026",
+    "type": "patient-profile",
+    "text": "Patient P0026 is 85 years old, has mild heart failure, and lives with family."
+  },
+  {
+    "id": "P0026-note",
+    "patient_id": "P0026",
+    "type": "medical-note",
+    "text": "Medical note 0026 for P0026: body temperature reached 38.8 C during the evening check. Repeated borderline oxygen readings should be monitored closely."
+  },
+  {
+    "id": "P0027-profile",
+    "patient_id": "P0027",
+    "type": "patient-profile",
+    "text": "Patient P0027 is 76 years old, has hypertension, and receives daily caregiver visits."
+  },
+  {
+    "id": "P0027-note",
+    "patient_id": "P0027",
+    "type": "medical-note",
+    "text": "Medical note 0027 for P0027: blood pressure was low and the patient felt weak and unsteady. Missed medication and worsening fatigue may increase support needs."
+  },
+  {
+    "id": "P0028-profile",
+    "patient_id": "P0028",
+    "type": "patient-profile",
+    "text": "Patient P0028 is 83 years old, has atrial fibrillation, and has overnight support from a relative."
+  },
+  {
+    "id": "P0028-note",
+    "patient_id": "P0028",
+    "type": "medical-note",
+    "text": "Medical note 0028 for P0028: the patient had mild shortness of breath while walking to the bathroom. Room isolation plus low SpO2 can be concerning in a patient who lives alone."
+  },
+  {
+    "id": "P0029-profile",
+    "patient_id": "P0029",
+    "type": "patient-profile",
+    "text": "Patient P0029 is 74 years old, has asthma, and lives in an assisted living apartment."
+  },
+  {
+    "id": "P0029-note",
+    "patient_id": "P0029",
+    "type": "medical-note",
+    "text": "Medical note 0029 for P0029: the patient reported chest discomfort and fatigue after taking a short walk. Persistent weakness after mobility activity may suggest deconditioning."
+  },
+  {
+    "id": "P0030-profile",
+    "patient_id": "P0030",
+    "type": "patient-profile",
+    "text": "Patient P0030 is 86 years old, has chronic kidney disease, and lives alone."
+  },
+  {
+    "id": "P0030-note",
+    "patient_id": "P0030",
+    "type": "medical-note",
+    "text": "Medical note 0030 for P0030: the patient had an irregular pulse with intermittent palpitations. A fall combined with low oxygen saturation may indicate a high-risk event."
+  },
+  {
+    "id": "P0031-profile",
+    "patient_id": "P0031",
+    "type": "patient-profile",
+    "text": "Patient P0031 is 66 years old, has frailty, and lives with family."
+  },
+  {
+    "id": "P0031-note",
+    "patient_id": "P0031",
+    "type": "medical-note",
+    "text": "Medical note 0031 for P0031: the patient had poor sleep and reduced appetite over the last 24 hours. Bradycardia in a frail older adult may require clinical review."
+  },
+  {
+    "id": "P0032-profile",
+    "patient_id": "P0032",
+    "type": "patient-profile",
+    "text": "Patient P0032 is 63 years old, has COPD, and receives daily caregiver visits."
+  },
+  {
+    "id": "P0032-note",
+    "patient_id": "P0032",
+    "type": "medical-note",
+    "text": "Medical note 0032 for P0032: oxygen saturation dropped to 90% and the patient reported dizziness. Repeated borderline oxygen readings should be monitored closely."
+  },
+  {
+    "id": "P0033-profile",
+    "patient_id": "P0033",
+    "type": "patient-profile",
+    "text": "Patient P0033 is 81 years old, has type 2 diabetes, and has overnight support from a relative."
+  },
+  {
+    "id": "P0033-note",
+    "patient_id": "P0033",
+    "type": "medical-note",
+    "text": "Medical note 0033 for P0033: heart rate was 109 bpm after standing up quickly. Missed medication and worsening fatigue may increase support needs."
+  },
+  {
+    "id": "P0034-profile",
+    "patient_id": "P0034",
+    "type": "patient-profile",
+    "text": "Patient P0034 is 61 years old, has mild heart failure, and lives in an assisted living apartment."
+  },
+  {
+    "id": "P0034-note",
+    "patient_id": "P0034",
+    "type": "medical-note",
+    "text": "Medical note 0034 for P0034: body temperature reached 36.0 C during the evening check. Room isolation plus low SpO2 can be concerning in a patient who lives alone."
+  },
+  {
+    "id": "P0035-profile",
+    "patient_id": "P0035",
+    "type": "patient-profile",
+    "text": "Patient P0035 is 85 years old, has hypertension, and lives alone."
+  },
+  {
+    "id": "P0035-note",
+    "patient_id": "P0035",
+    "type": "medical-note",
+    "text": "Medical note 0035 for P0035: blood pressure was low and the patient felt weak and unsteady. Persistent weakness after mobility activity may suggest deconditioning."
+  },
+  {
+    "id": "P0036-profile",
+    "patient_id": "P0036",
+    "type": "patient-profile",
+    "text": "Patient P0036 is 89 years old, has atrial fibrillation, and lives with family."
+  },
+  {
+    "id": "P0036-note",
+    "patient_id": "P0036",
+    "type": "medical-note",
+    "text": "Medical note 0036 for P0036: the patient had mild shortness of breath while walking to the bathroom. A fall combined with low oxygen saturation may indicate a high-risk event."
+  },
+  {
+    "id": "P0037-profile",
+    "patient_id": "P0037",
+    "type": "patient-profile",
+    "text": "Patient P0037 is 64 years old, has asthma, and receives daily caregiver visits."
+  },
+  {
+    "id": "P0037-note",
+    "patient_id": "P0037",
+    "type": "medical-note",
+    "text": "Medical note 0037 for P0037: the patient reported chest discomfort and fatigue after taking a short walk. Bradycardia in a frail older adult may require clinical review."
+  },
+  {
+    "id": "P0038-profile",
+    "patient_id": "P0038",
+    "type": "patient-profile",
+    "text": "Patient P0038 is 62 years old, has chronic kidney disease, and has overnight support from a relative."
+  },
+  {
+    "id": "P0038-note",
+    "patient_id": "P0038",
+    "type": "medical-note",
+    "text": "Medical note 0038 for P0038: the patient had an irregular pulse with intermittent palpitations. Repeated borderline oxygen readings should be monitored closely."
+  },
+  {
+    "id": "P0039-profile",
+    "patient_id": "P0039",
+    "type": "patient-profile",
+    "text": "Patient P0039 is 73 years old, has frailty, and lives in an assisted living apartment."
+  },
+  {
+    "id": "P0039-note",
+    "patient_id": "P0039",
+    "type": "medical-note",
+    "text": "Medical note 0039 for P0039: the patient had poor sleep and reduced appetite over the last 24 hours. Missed medication and worsening fatigue may increase support needs."
+  },
+  {
+    "id": "P0040-profile",
+    "patient_id": "P0040",
+    "type": "patient-profile",
+    "text": "Patient P0040 is 74 years old, has COPD, and lives alone."
+  },
+  {
+    "id": "P0040-note",
+    "patient_id": "P0040",
+    "type": "medical-note",
+    "text": "Medical note 0040 for P0040: oxygen saturation dropped to 92% and the patient reported dizziness. Room isolation plus low SpO2 can be concerning in a patient who lives alone."
+  },
+  {
+    "id": "P0041-profile",
+    "patient_id": "P0041",
+    "type": "patient-profile",
+    "text": "Patient P0041 is 87 years old, has type 2 diabetes, and lives with family."
+  },
+  {
+    "id": "P0041-note",
+    "patient_id": "P0041",
+    "type": "medical-note",
+    "text": "Medical note 0041 for P0041: heart rate was 101 bpm after standing up quickly. Persistent weakness after mobility activity may suggest deconditioning."
+  },
+  {
+    "id": "P0042-profile",
+    "patient_id": "P0042",
+    "type": "patient-profile",
+    "text": "Patient P0042 is 66 years old, has mild heart failure, and receives daily caregiver visits."
+  },
+  {
+    "id": "P0042-note",
+    "patient_id": "P0042",
+    "type": "medical-note",
+    "text": "Medical note 0042 for P0042: body temperature reached 35.7 C during the evening check. A fall combined with low oxygen saturation may indicate a high-risk event."
+  },
+  {
+    "id": "P0043-profile",
+    "patient_id": "P0043",
+    "type": "patient-profile",
+    "text": "Patient P0043 is 79 years old, has hypertension, and has overnight support from a relative."
+  },
+  {
+    "id": "P0043-note",
+    "patient_id": "P0043",
+    "type": "medical-note",
+    "text": "Medical note 0043 for P0043: blood pressure was low and the patient felt weak and unsteady. Bradycardia in a frail older adult may require clinical review."
+  },
+  {
+    "id": "P0044-profile",
+    "patient_id": "P0044",
+    "type": "patient-profile",
+    "text": "Patient P0044 is 86 years old, has atrial fibrillation, and lives in an assisted living apartment."
+  },
+  {
+    "id": "P0044-note",
+    "patient_id": "P0044",
+    "type": "medical-note",
+    "text": "Medical note 0044 for P0044: the patient had mild shortness of breath while walking to the bathroom. Repeated borderline oxygen readings should be monitored closely."
+  },
+  {
+    "id": "P0045-profile",
+    "patient_id": "P0045",
+    "type": "patient-profile",
+    "text": "Patient P0045 is 61 years old, has asthma, and lives alone."
+  },
+  {
+    "id": "P0045-note",
+    "patient_id": "P0045",
+    "type": "medical-note",
+    "text": "Medical note 0045 for P0045: the patient reported chest discomfort and fatigue after taking a short walk. Missed medication and worsening fatigue may increase support needs."
+  },
+  {
+    "id": "P0046-profile",
+    "patient_id": "P0046",
+    "type": "patient-profile",
+    "text": "Patient P0046 is 85 years old, has chronic kidney disease, and lives with family."
+  },
+  {
+    "id": "P0046-note",
+    "patient_id": "P0046",
+    "type": "medical-note",
+    "text": "Medical note 0046 for P0046: the patient had an irregular pulse with intermittent palpitations. Room isolation plus low SpO2 can be concerning in a patient who lives alone."
+  },
+  {
+    "id": "P0047-profile",
+    "patient_id": "P0047",
+    "type": "patient-profile",
+    "text": "Patient P0047 is 86 years old, has frailty, and receives daily caregiver visits."
+  },
+  {
+    "id": "P0047-note",
+    "patient_id": "P0047",
+    "type": "medical-note",
+    "text": "Medical note 0047 for P0047: the patient had poor sleep and reduced appetite over the last 24 hours. Persistent weakness after mobility activity may suggest deconditioning."
+  },
+  {
+    "id": "P0048-profile",
+    "patient_id": "P0048",
+    "type": "patient-profile",
+    "text": "Patient P0048 is 60 years old, has COPD, and has overnight support from a relative."
+  },
+  {
+    "id": "P0048-note",
+    "patient_id": "P0048",
+    "type": "medical-note",
+    "text": "Medical note 0048 for P0048: oxygen saturation dropped to 94% and the patient reported dizziness. A fall combined with low oxygen saturation may indicate a high-risk event."
+  },
+  {
+    "id": "P0049-profile",
+    "patient_id": "P0049",
+    "type": "patient-profile",
+    "text": "Patient P0049 is 80 years old, has type 2 diabetes, and lives in an assisted living apartment."
+  },
+  {
+    "id": "P0049-note",
+    "patient_id": "P0049",
+    "type": "medical-note",
+    "text": "Medical note 0049 for P0049: heart rate was 50 bpm after standing up quickly. Bradycardia in a frail older adult may require clinical review."
+  },
+  {
+    "id": "P0050-profile",
+    "patient_id": "P0050",
+    "type": "patient-profile",
+    "text": "Patient P0050 is 86 years old, has mild heart failure, and lives alone."
+  },
+  {
+    "id": "P0050-note",
+    "patient_id": "P0050",
+    "type": "medical-note",
+    "text": "Medical note 0050 for P0050: body temperature reached 36.6 C during the evening check. Repeated borderline oxygen readings should be monitored closely."
+  }
+]
