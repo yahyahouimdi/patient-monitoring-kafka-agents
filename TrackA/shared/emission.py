@@ -13,7 +13,6 @@ SEVERITY_TO_CONNECTION = {
     "critical": "dedicated_low_latency",
     "high": "dedicated_relaxed",
     "moderate": "shared_good_quality",
-    "moderate_watch": "shared_good_quality",  # S4: proactive re-check, not urgent
     "normal": "none",
 }
 

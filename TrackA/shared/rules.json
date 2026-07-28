@@ -1,0 +1,21 @@
+{
+  "heart_rate": {
+    "critical_low": 40,
+    "critical_high": 150,
+    "high_low": 50,
+    "high_high": 130
+  },
+  "spo2": {
+    "critical": 90
+  },
+  "temperature": {
+    "moderate_low": 35,
+    "moderate_high": 39,
+    "high_low": 34,
+    "high_high": 40
+  },
+  "environment": {
+    "room_temp_hot": 28,
+    "speaker_loud_db": 80
+  }
+}

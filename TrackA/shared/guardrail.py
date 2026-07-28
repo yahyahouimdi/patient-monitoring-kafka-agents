@@ -33,8 +33,7 @@ def apply_guardrail(state: PatientState, llm_result: dict) -> ReasoningResult:
         )
 
     llm_severity = llm_result["severity"]
-    # Never let the model downgrade below the rule-table floor; it may
-    # only match or escalate (e.g. S4: normal -> moderate_watch).
+    # Never let the model downgrade below the rule-table floor; it may only escalate or annotate.
     final_severity = (
         llm_severity
         if rules.severity_rank(llm_severity) >= rules.severity_rank(rule_severity)
