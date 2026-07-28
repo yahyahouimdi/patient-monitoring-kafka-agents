@@ -1,0 +1,14 @@
+[
+{
+"patient_id": "P001",
+"text": "Patient P001 is 78 years old, has COPD, lives alone, and has a history of falls."
+},
+{
+"patient_id": "P002",
+"text": "Patient P002 is 65 years old, has type 2 diabetes, and lives with family."
+},
+{
+"patient_id": "P003",
+"text": "Patient P003 is 82 years old, has mild heart failure, and receives daily caregiver visits."
+}
+]

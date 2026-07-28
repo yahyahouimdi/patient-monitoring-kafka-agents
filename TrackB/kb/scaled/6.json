@@ -1,0 +1,38 @@
+[
+  {
+    "id": "P0001-profile",
+    "patient_id": "P0001",
+    "type": "patient-profile",
+    "text": "Patient P0001 is 85 years old, has type 2 diabetes, and lives with family."
+  },
+  {
+    "id": "P0001-note",
+    "patient_id": "P0001",
+    "type": "medical-note",
+    "text": "Medical note 0001 for P0001: heart rate was 58 bpm after standing up quickly. Bradycardia in a frail older adult may require clinical review."
+  },
+  {
+    "id": "P0002-profile",
+    "patient_id": "P0002",
+    "type": "patient-profile",
+    "text": "Patient P0002 is 68 years old, has mild heart failure, and receives daily caregiver visits."
+  },
+  {
+    "id": "P0002-note",
+    "patient_id": "P0002",
+    "type": "medical-note",
+    "text": "Medical note 0002 for P0002: body temperature reached 36.0 C during the evening check. Repeated borderline oxygen readings should be monitored closely."
+  },
+  {
+    "id": "P0003-profile",
+    "patient_id": "P0003",
+    "type": "patient-profile",
+    "text": "Patient P0003 is 78 years old, has hypertension, and has overnight support from a relative."
+  },
+  {
+    "id": "P0003-note",
+    "patient_id": "P0003",
+    "type": "medical-note",
+    "text": "Medical note 0003 for P0003: blood pressure was low and the patient felt weak and unsteady. Missed medication and worsening fatigue may increase support needs."
+  }
+]
