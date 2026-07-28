@@ -8,8 +8,15 @@ otherwise), plus a hard timeout with a safe "None" fallback so a slow or
 wrong model degrades to the rule table instead of blocking Tier 2.
 """
 import json
+
 import requests
-from .config import settings
+
+try:
+    from .config import settings
+except ImportError:
+    # Allows this file to also be run/imported directly (not just as
+    # shared.reasoning_client) -- same fix applied to retrieval_client.py.
+    from config import settings
 
 VALID_SEVERITIES = {"normal", "moderate", "high", "critical"}
 
@@ -21,6 +28,13 @@ SYSTEM_PROMPT = (
     '"note" (a short, under-20-word justification). '
     "Never invent readings that are not present in the narrative."
 )
+
+
+def get_tags_url() -> str:
+    """Derive Ollama's /api/tags URL (used for a lightweight health/model
+    check) from settings.OLLAMA_URL, e.g.
+    http://localhost:11434/api/generate -> http://localhost:11434/api/tags."""
+    return settings.OLLAMA_URL.rsplit("/api/generate", 1)[0] + "/api/tags"
 
 
 def call_reasoning_model(narrative: str, retrieved: list) -> dict:
