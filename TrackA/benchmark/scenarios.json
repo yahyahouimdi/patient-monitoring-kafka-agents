@@ -1,0 +1,89 @@
+{
+  "S1": {
+    "description": "Irregular heartbeat + fall detected + low oxygen + elderly and alone -> critical, dedicated low-latency connection",
+    "expected": "critical",
+    "events": [
+      {"topic": "smarthome-context", "delay": 0.0,
+        "payload": {"alone": 1, "presence_room": "bedroom", "dose_taken": 1,
+                    "room_temperature": 22, "smart_speaker_max_dcb": 35}},
+      {"topic": "device-connectivity", "delay": 0.2,
+        "payload": {"device_type": "wearable", "connected": 1}},
+      {"topic": "wearable-vitals", "delay": 0.5,
+        "payload": {"heart_rate": 162, "spo2": 85, "body_temperature": 37.6,
+                    "fall_detection": 1}}
+    ]
+  },
+  "S2": {
+    "description": "All readings within normal range, nothing unusual -> no alarm, no network request",
+    "expected": "normal",
+    "events": [
+      {"topic": "smarthome-context", "delay": 0.0,
+        "payload": {"alone": 0, "presence_room": "living_room", "dose_taken": 1,
+                    "room_temperature": 21, "smart_speaker_max_dcb": 40}},
+      {"topic": "device-connectivity", "delay": 0.2,
+        "payload": {"device_type": "wearable", "connected": 1}},
+      {"topic": "wearable-vitals", "delay": 0.5,
+        "payload": {"heart_rate": 75, "spo2": 97, "body_temperature": 36.8,
+                    "fall_detection": 0}}
+    ]
+  },
+  "S3": {
+    "description": "Unusually slow heart rate, no other risk factors -> moderate, good-quality non-emergency connection",
+    "expected": "moderate",
+    "events": [
+      {"topic": "smarthome-context", "delay": 0.0,
+        "payload": {"alone": 0, "presence_room": "kitchen", "dose_taken": 1,
+                    "room_temperature": 22, "smart_speaker_max_dcb": 38}},
+      {"topic": "device-connectivity", "delay": 0.2,
+        "payload": {"device_type": "wearable", "connected": 1}},
+      {"topic": "wearable-vitals", "delay": 0.5,
+        "payload": {"heart_rate": 45, "spo2": 96, "body_temperature": 36.9,
+                    "fall_detection": 0}}
+    ]
+  },
+  "S4": {
+    "description": "Heat + missed medication + alone: HR mildly elevated (kept below Tier-1 thresholds on purpose), hot room, dose missed, patient alone -> rule table says NORMAL, reasoning tier should say MODERATE/watch-closely",
+    "expected_rule_table": "normal",
+    "expected_reasoning": "moderate",
+    "events": [
+      {"topic": "smarthome-context", "delay": 0.0,
+        "payload": {"alone": 1, "presence_room": "bedroom", "dose_taken": 0,
+                    "room_temperature": 30, "smart_speaker_max_dcb": 35}},
+      {"topic": "device-connectivity", "delay": 0.2,
+        "payload": {"device_type": "wearable", "connected": 1}},
+      {"topic": "wearable-vitals", "delay": 0.5,
+        "payload": {"heart_rate": 125, "spo2": 96, "body_temperature": 37.0,
+                    "fall_detection": 0}}
+    ]
+  },
+  "S5": {
+    "description": "Fall evidence without the fall flag: HR spike, fall sensor NOT triggered, loud noise, check-in unanswered -> rule table escalates on HR alone (moderate), reasoning tier should say HIGH/SEVERE (likely missed fall)",
+    "expected_rule_table": "moderate",
+    "expected_reasoning": "high_severe",
+    "events": [
+      {"topic": "smarthome-context", "delay": 0.0,
+        "payload": {"alone": 1, "presence_room": "bathroom", "dose_taken": 1,
+                    "room_temperature": 23, "smart_speaker_max_dcb": 88,
+                    "checkin_response": "no_response"}},
+      {"topic": "device-connectivity", "delay": 0.2,
+        "payload": {"device_type": "wearable", "connected": 1}},
+      {"topic": "wearable-vitals", "delay": 0.5,
+        "payload": {"heart_rate": 145, "spo2": 94, "body_temperature": 37.1,
+                    "fall_detection": 0}}
+    ]
+  },
+  "S6": {
+    "description": "Threshold-crossing HR at the same moment as a brief connectivity dropout -> alarm still fires unmodified, reasoning tier attaches a verify/confidence note only",
+    "expected": "high_with_uncertain_confidence",
+    "events": [
+      {"topic": "smarthome-context", "delay": 0.0,
+        "payload": {"alone": 0, "presence_room": "living_room", "dose_taken": 1,
+                    "room_temperature": 22, "smart_speaker_max_dcb": 40}},
+      {"topic": "device-connectivity", "delay": 0.2,
+        "payload": {"device_type": "wearable", "connected": 0}},
+      {"topic": "wearable-vitals", "delay": 0.3,
+        "payload": {"heart_rate": 155, "spo2": 95, "body_temperature": 37.2,
+                    "fall_detection": 0}}
+    ]
+  }
+}

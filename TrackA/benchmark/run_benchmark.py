@@ -14,6 +14,7 @@ Usage:
 Writes benchmark/results.json and prints a summary table.
 """
 import argparse
+import hashlib
 import json
 import os
 import statistics
@@ -23,13 +24,25 @@ import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from benchmark import instrumentation
-from benchmark.fixtures import EVENTS
+from TrackA.benchmark import instrumentation
+from TrackA.benchmark.fixtures import EVENTS
 
 os.environ.setdefault("OPENAI_API_KEY", "sk-stub")
 os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
 os.environ["CREWAI_TRACING_ENABLED"] = "false"
+
+
+def stable_seed(*parts):
+    """
+    Deterministic seed derived from `parts`, independent of PYTHONHASHSEED.
+    Python's built-in hash() is salted per-process for strings/tuples, so
+    it gives repeatable results *within* one run but not across separate
+    invocations of this script -- results.json from different runs would
+    not be directly comparable. hashlib gives a stable digest instead.
+    """
+    key = "|".join(str(p) for p in parts).encode("utf-8")
+    return int(hashlib.md5(key).hexdigest(), 16) & 0xFFFFFFFF
 
 
 def _run_langgraph(patient_id, merged_state):
@@ -43,20 +56,31 @@ def _run_autogen(patient_id, merged_state):
 
 
 _crewai_stub_started = False
+_crewai_stub_llm = None
 
 
 def _run_crewai(patient_id, merged_state):
-    global _crewai_stub_started
-    from benchmark.local_llm_stub import start as start_stub
+    global _crewai_stub_started, _crewai_stub_llm
+    from TrackA.benchmark.local_llm_stub import start as start_stub
     from crewai import LLM
     from TrackA.crewai_impl import crew as mod
 
     if not _crewai_stub_started:
         start_stub(8877)
+        # Give the stub server's listener thread a moment to actually bind
+        # and accept connections before we send it anything -- otherwise
+        # the very first request can race the server startup.
+        _wait_for_stub_ready("127.0.0.1", 8877, timeout=10)
         _crewai_stub_started = True
 
-    stub_llm = LLM(model="openai/gpt-4o-mini", base_url="http://127.0.0.1:8877/v1", api_key="sk-stub")
-    orig_make_agents = mod._make_agents.__wrapped__ if hasattr(mod._make_agents, "__wrapped__") else None
+    # Build the stub LLM once and reuse it. Previously this was rebuilt on
+    # every call, but the monkey-patch that wires it into the agents was
+    # only ever installed once (guarded by _stub_patched below), so every
+    # stub_llm built after the first call was silently discarded -- the
+    # agents kept using the very first instance regardless. Building it
+    # once, up front, makes that explicit instead of accidental.
+    if _crewai_stub_llm is None:
+        _crewai_stub_llm = LLM(model="openai/gpt-4o-mini", base_url="http://127.0.0.1:8877/v1", api_key="sk-stub")
 
     # Patch once: wrap _make_agents so every Agent uses the local stub LLM
     # instead of requiring a real OpenAI key. Idempotent across calls.
@@ -66,13 +90,28 @@ def _run_crewai(patient_id, merged_state):
         def patched_make_agents():
             agents = base_make_agents()
             for a in agents:
-                a.llm = stub_llm
+                a.llm = _crewai_stub_llm
             return agents
 
         mod._make_agents = patched_make_agents
         mod._stub_patched = True
 
     return mod.run_pipeline(patient_id, merged_state)
+
+
+def _wait_for_stub_ready(host, port, timeout=10):
+    import socket
+
+    deadline = time.time() + timeout
+    last_err = None
+    while time.time() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=0.5):
+                return
+        except OSError as e:
+            last_err = e
+            time.sleep(0.1)
+    raise RuntimeError(f"local LLM stub on {host}:{port} never became ready: {last_err}")
 
 
 CANDIDATES = {
@@ -118,7 +157,7 @@ def main():
         print(f"\n=== {name} ===", file=sys.stderr)
         for rep in range(args.repeats):
             for patient_id, merged_state in EVENTS:
-                seed = hash((patient_id, rep)) & 0xFFFFFFFF
+                seed = stable_seed(patient_id, rep)
                 run = run_one(name, fn, patient_id, merged_state, seed)
                 run["repeat"] = rep
                 all_results[name].append(run)

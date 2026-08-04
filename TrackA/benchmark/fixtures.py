@@ -2,14 +2,21 @@
 benchmark/fixtures.py
 
 Builds the EVENTS the three orchestration-framework candidates are
-benchmarked against, by replaying the *same* S1-S6 scenario definitions
-used for the live Kafka demo (../kafka/scenarios.json, read by
-../kafka/fixtures.py) -- rather than inventing separate synthetic
-benchmark data that could quietly drift out of sync with the real
-scenarios.
+benchmarked against, by replaying S1-S6 scenario definitions in memory
+-- no Kafka broker required.
 
-Replay happens entirely in memory, with no Kafka broker required: each
-scenario's events are folded into a merged per-patient state dict
+This file is deliberately self-contained: it reads scenarios.json from
+*this* folder (benchmark/scenarios.json), not from ../kafka/. That's a
+copy of the real scenario definitions from the kafka/ folder, kept here
+on purpose so the benchmark/ folder has zero dependency on the rest of
+the project -- you can copy just this folder anywhere and
+`python -m benchmark.run_benchmark` will work standalone.
+
+Trade-off: if you edit kafka/scenarios.json later, this copy will not
+pick that up automatically -- re-copy it into benchmark/scenarios.json
+if you want the benchmark to reflect a scenario change.
+
+Each scenario's events are folded into a merged per-patient state dict
 shaped exactly like tier2_agent.py's `patient_state[pid]` (one key per
 topic, plus a "connectivity" sub-dict) -- so a TrackA candidate's
 run_pipeline(patient_id, merged_state) sees the same shape it would see
@@ -18,16 +25,14 @@ from the real Tier-2 skeleton.
 EVENTS = [(scenario_label, merged_state), ...] for S1 through S6.
 
 Run directly to print what gets built:
-    PYTHONPATH=/home/claude/project python3 -m benchmark.fixtures
+    PYTHONPATH=/path/to/wherever python3 -m benchmark.fixtures
 """
 
 import copy
 import json
 from pathlib import Path
 
-# kafka/ is a sibling of benchmark/ -- both live under the project root.
-KAFKA_DIR = Path(__file__).resolve().parent.parent / "kafka"
-SCENARIOS_PATH = KAFKA_DIR / "scenarios.json"
+SCENARIOS_PATH = Path(__file__).resolve().parent / "scenarios.json"
 
 # Kept in sync with kafka/sensor_simulator.py's PATIENTS list and
 # kafka/fixtures.py's PATIENT_DEVICE_MAP. Benchmarking only needs one
@@ -53,9 +58,8 @@ def _load_scenarios():
     if not SCENARIOS_PATH.exists():
         raise FileNotFoundError(
             f"Expected scenario definitions at {SCENARIOS_PATH}. "
-            "benchmark/fixtures.py reuses the same scenarios.json as "
-            "kafka/fixtures.py rather than duplicating scenario data -- "
-            "make sure kafka/scenarios.json exists alongside kafka/fixtures.py."
+            "benchmark/scenarios.json should ship alongside benchmark/fixtures.py "
+            "-- if it's missing, copy it back in from the kafka/ folder."
         )
     with open(SCENARIOS_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
