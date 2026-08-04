@@ -20,7 +20,7 @@ class Settings:
     REASONING_NUM_PREDICT = int(os.environ.get("REASONING_NUM_PREDICT", "120"))
 
     # Track B's retrieval service
-    RETRIEVAL_SERVICE_URL = os.environ.get("RETRIEVAL_SERVICE_URL", "http://localhost:8001/search")
+    RETRIEVAL_SERVICE_URL = os.environ.get("RETRIEVAL_SERVICE_URL", "http://127.0.0.1:8001/search")
     RETRIEVAL_TIMEOUT_S = float(os.environ.get("RETRIEVAL_TIMEOUT_S", "2000.0"))
     RETRIEVAL_K = int(os.environ.get("RETRIEVAL_K", "2"))
 
