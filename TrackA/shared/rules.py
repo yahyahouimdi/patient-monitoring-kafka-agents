@@ -39,11 +39,8 @@ HR_HIGH_HIGH = CONFIG["heart_rate"]["high_high"]
 
 SPO2_CRITICAL = CONFIG["spo2"]["critical"]
 
-TEMP_LOW = CONFIG["temperature"]["low"]
-TEMP_HIGH = CONFIG["temperature"]["high"]
-
-HR_WATCH_LOW = CONFIG["watch_zone"]["heart_rate_low"]
-HR_WATCH_HIGH = CONFIG["watch_zone"]["heart_rate_high"]
+TEMP_LOW = CONFIG["temperature"]["moderate_low"]
+TEMP_HIGH = CONFIG["temperature"]["moderate_high"]
 
 ROOM_TEMP_HOT = CONFIG["environment"]["room_temp_hot"]
 SPEAKER_LOUD_DB = CONFIG["environment"]["speaker_loud_db"]
