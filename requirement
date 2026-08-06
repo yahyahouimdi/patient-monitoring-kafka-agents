@@ -23,3 +23,5 @@ mypy
 
 # orchestration frameworks (choose one for Phase 1)
 langgraph
+pyautogen
+crewai
