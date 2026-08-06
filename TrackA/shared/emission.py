@@ -51,3 +51,8 @@ def emit(producer, request: NetworkRequest) -> None:
             "timestamp": request.timestamp,
         },
     )
+    print(
+        f"[NETWORK-REQUEST] {request.patient_id} - {request.severity.upper()} - "
+        f"{request.connection_type} - {request.reason}",
+        flush=True,
+    )

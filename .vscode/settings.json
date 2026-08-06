@@ -1,0 +1,7 @@
+{
+  "python.defaultInterpreterPath": "C:\\Python314\\python.exe",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}"
+  ],
+  "python.analysis.stubPath": "${workspaceFolder}\\typings"
+}
