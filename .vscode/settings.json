@@ -1,5 +1,5 @@
 {
-  "python.defaultInterpreterPath": "C:\\Python314\\python.exe",
+  "python.defaultInterpreterPath": "C:\\Python312\\python.exe",
   "python.analysis.extraPaths": [
     "${workspaceFolder}"
   ],
