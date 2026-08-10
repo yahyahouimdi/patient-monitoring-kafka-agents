@@ -8,13 +8,17 @@ shared/, so the actual decision/reasoning logic is identical across all
 three framework candidates; only the orchestration mechanics differ.
 
 Fit note (for Appendix A): CrewAI's Agent/Task/Crew model is built around
-an agent choosing how to use tools to satisfy a goal. Our pipeline has no
-such choice points -- it's a fixed 5-step sequence with exactly one real
-reasoning call -- so this implementation uses a single Process.sequential
-Crew with one Task per pipeline stage, each Task assigned to a
-single-purpose Agent whose only tool is the corresponding shared/ call.
-This sidesteps CrewAI's LLM-driven task planning entirely, which is worth
-noting as a fit/adaptation cost in the comparison matrix.
+an agent choosing how to use tools to satisfy a goal, and Process.sequential
+has no native conditional/branching support -- unlike LangGraph's
+add_conditional_edges. This implementation therefore expresses the gate
+as a real first Task (gate_task), run through CrewAI's own Agent/Task/tool
+dispatch just like every other stage, but the four tasks after it are
+written as guarded no-ops: each tool checks _ctx["should_reason"] and
+returns immediately if the gate declined. Net effect: on a declined gate,
+CrewAI still constructs and kicks off all 4 agents and all 5 tasks, it
+just does no real work in 4 of them -- a real cost LangGraph's conditional
+edge does not pay. Worth reporting explicitly under "supported agent
+topologies" / "debuggability" in the comparison matrix.
 """
 from typing import Optional
 
@@ -36,9 +40,21 @@ from TrackA.shared.schemas import NetworkRequest, PatientState
 _ctx: dict = {}  # per-invocation scratch space, reset in run_pipeline()
 
 
+@tool("gate_check")
+def gate_check_tool() -> str:
+    """Decide whether Tier 2 reasoning is warranted for the current patient
+    state. Every downstream tool checks this flag and no-ops if it's False,
+    since Process.sequential cannot skip tasks outright."""
+    ps = _ctx["patient_state"]
+    _ctx["should_reason"] = gate.should_reason_about(ps)
+    return "reason" if _ctx["should_reason"] else "skip"
+
+
 @tool("retrieve_context")
 def retrieve_context_tool() -> str:
     """Fetch relevant patient-profile snippets from the retrieval service."""
+    if not _ctx.get("should_reason"):
+        return "skipped -- gate declined"
     ps = _ctx["patient_state"]
     query = f"patient {ps.patient_id} history {ps.maladie or ''}"
     _ctx["retrieved"] = retrieval_client.search(query)
@@ -48,6 +64,8 @@ def retrieve_context_tool() -> str:
 @tool("call_reasoning_model")
 def call_reasoning_model_tool() -> str:
     """Call the locally-hosted reasoning model with the assembled narrative."""
+    if not _ctx.get("should_reason"):
+        return "skipped -- gate declined"
     ps = _ctx["patient_state"]
     narrative = (
         f"HR={ps.heart_rate}, SpO2={ps.spo2}, Temp={ps.body_temperature}C, "
@@ -62,6 +80,8 @@ def call_reasoning_model_tool() -> str:
 @tool("apply_severity_mapping")
 def apply_severity_mapping_tool() -> str:
     """Map the raw reasoning output to a guarded severity/urgency result."""
+    if not _ctx.get("should_reason"):
+        return "skipped -- gate declined"
     _ctx["result"] = guardrail.apply_guardrail(_ctx["patient_state"], _ctx["llm_result"])
     return "mapping complete"
 
@@ -69,6 +89,8 @@ def apply_severity_mapping_tool() -> str:
 @tool("emit_network_request")
 def emit_network_request_tool() -> str:
     """Build and stage the network-request artifact for emission."""
+    if not _ctx.get("should_reason"):
+        return "skipped -- gate declined"
     ps = _ctx["patient_state"]
     result = _ctx["result"]
     reason = result.note or "reasoning-tier judgment"
@@ -84,6 +106,13 @@ def emit_network_request_tool() -> str:
 
 def _make_agents():
     common_kwargs = dict(verbose=False, allow_delegation=False)
+    gate_agent = Agent(
+        role="Reasoning Gate",
+        goal="Decide whether this patient event warrants Tier-2 reasoning.",
+        backstory="Scores weak-signal evidence; declines cheaply when nothing warrants a model call.",
+        tools=[gate_check_tool],
+        **common_kwargs,
+    )
     retrieval_agent = Agent(
         role="Context Retriever",
         goal="Fetch background context relevant to the current patient event.",
@@ -112,43 +141,51 @@ def _make_agents():
         tools=[emit_network_request_tool],
         **common_kwargs,
     )
-    return retrieval_agent, reasoning_agent, mapping_agent, emission_agent
+    return gate_agent, retrieval_agent, reasoning_agent, mapping_agent, emission_agent
 
 
 def _make_tasks(agents):
-    retrieval_agent, reasoning_agent, mapping_agent, emission_agent = agents
+    gate_agent, retrieval_agent, reasoning_agent, mapping_agent, emission_agent = agents
+
+    gate_task = Task(
+        description="Call gate_check to decide whether Tier-2 reasoning should run.",
+        expected_output="'reason' if reasoning should proceed, 'skip' otherwise.",
+        agent=gate_agent,
+    )
     retrieval_task = Task(
         description="Call retrieve_context to fetch background snippets.",
-        expected_output="Confirmation of how many snippets were retrieved.",
+        expected_output="Confirmation of how many snippets were retrieved, or a skip notice.",
         agent=retrieval_agent,
+        context=[gate_task],
     )
     reasoning_task = Task(
         description="Call call_reasoning_model to get the model's judgment.",
-        expected_output="Confirmation that reasoning completed.",
+        expected_output="Confirmation that reasoning completed, or a skip notice.",
         agent=reasoning_agent,
         context=[retrieval_task],
     )
     mapping_task = Task(
         description="Call apply_severity_mapping to guard and map the result.",
-        expected_output="Confirmation that mapping completed.",
+        expected_output="Confirmation that mapping completed, or a skip notice.",
         agent=mapping_agent,
         context=[reasoning_task],
     )
     emission_task = Task(
         description="Call emit_network_request to build the final artifact.",
-        expected_output="Confirmation that the network request was built.",
+        expected_output="Confirmation that the network request was built, or a skip notice.",
         agent=emission_agent,
         context=[mapping_task],
     )
-    return [retrieval_task, reasoning_task, mapping_task, emission_task]
+    return [gate_task, retrieval_task, reasoning_task, mapping_task, emission_task]
 
 
 def run_pipeline(patient_id: str, merged_state: dict, producer=None) -> Optional[dict]:
     """Called from tier2_agent.py's reason_about(). Returns the emitted
     network-request dict, or None if the gate decided not to reason.
 
-    Same signature as langgraph_impl.graph.run_pipeline -- this is the
-    swap point for the framework comparison.
+    Same signature as langgraph_impl.graph.run_pipeline and
+    autogen_impl.agents.run_pipeline -- this is the swap point for the
+    framework comparison.
     """
     ps = PatientState.from_merged_dict(patient_id, merged_state)
 
@@ -160,19 +197,17 @@ def run_pipeline(patient_id: str, merged_state: dict, producer=None) -> Optional
     _ctx["result"] = None
     _ctx["network_request"] = None
 
-    # Short-circuit before spinning up the crew at all if the gate says no.
-    # (Doing this check inline, rather than making the crew branch, avoids
-    # forcing CrewAI's task graph to support conditional routing -- which
-    # is not something Process.sequential does natively; see comparison
-    # notes re: "supported agent topologies".)
-    if not gate.should_reason_about(ps):
-        return None
-    _ctx["should_reason"] = True
-
     agents = _make_agents()
     tasks = _make_tasks(agents)
     crew = Crew(agents=list(agents), tasks=tasks, process=Process.sequential, verbose=False)
     crew.kickoff()
+
+    # Gate decision is only known for certain after kickoff() has actually
+    # run gate_task through CrewAI's own dispatcher -- read it back from
+    # _ctx rather than re-checking gate.should_reason_about() directly, so
+    # this reflects what the framework run actually did.
+    if not _ctx.get("should_reason"):
+        return None
 
     network_request = _ctx.get("network_request")
     if network_request and producer is not None:

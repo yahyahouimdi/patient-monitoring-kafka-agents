@@ -22,8 +22,7 @@ import sys
 import time
 import traceback
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from TrackA.benchmark import instrumentation
 from TrackA.benchmark.fixtures import EVENTS
 
