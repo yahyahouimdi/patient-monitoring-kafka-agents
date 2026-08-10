@@ -140,7 +140,7 @@ def _make_tasks(agents):
         agent=emission_agent,
         context=[mapping_task],
     )
-    return [gate_task, retrieval_task, reasoning_task, mapping_task, emission_task]
+    return [retrieval_task, reasoning_task, mapping_task, emission_task]
 
 
 def run_pipeline(patient_id: str, merged_state: dict, producer=None) -> Optional[dict]:
