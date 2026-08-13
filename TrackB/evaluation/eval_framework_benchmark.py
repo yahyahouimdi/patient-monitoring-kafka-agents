@@ -73,6 +73,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from sklearn import metrics
+
 
 # ============================================================================
 # Windows asyncio compatibility
@@ -359,12 +361,13 @@ def run_ragas(cases):
     """
     Evaluate all four RAGAS metrics.
 
-    RAGAS 0.4.x:
-        - uses llm_factory()
-        - uses newer metric APIs
-        - no LangchainLLMWrapper required
+    Compatible with the current RAGAS 0.4.3 environment.
 
-    Ollama is accessed through its OpenAI-compatible endpoint.
+    Uses:
+        - qwen2.5:3b via Ollama as the RAGAS judge
+        - sentence-transformers/all-MiniLM-L6-v2 for AnswerRelevancy
+        - legacy RAGAS metric objects because evaluate() expects
+          the legacy Metric interface
     """
 
     # ------------------------------------------------------------------------
@@ -378,7 +381,11 @@ def run_ragas(cases):
 
     from ragas import evaluate
     from ragas.llms import llm_factory
+    from ragas.embeddings import HuggingFaceEmbeddings
 
+    # IMPORTANT:
+    # These are the legacy metric objects expected by ragas.evaluate()
+    # in this RAGAS 0.4.3 setup.
     from ragas.metrics import (
         faithfulness,
         answer_relevancy,
@@ -407,12 +414,6 @@ def run_ragas(cases):
     # ------------------------------------------------------------------------
     # Build RAGAS LLM
     # ------------------------------------------------------------------------
-    #
-    # RAGAS 0.4 recommends llm_factory() instead of
-    # LangchainLLMWrapper.
-    #
-    # Ollama exposes an OpenAI-compatible endpoint.
-    #
 
     judge_llm = llm_factory(
         OLLAMA_MODEL,
@@ -426,27 +427,61 @@ def run_ragas(cases):
     )
 
     # ------------------------------------------------------------------------
-    # Dataset
+    # Build RAGAS embeddings
     # ------------------------------------------------------------------------
     #
-    # RAGAS legacy evaluate() expects the standard RAG dataset field names.
+    # IMPORTANT:
+    # Do NOT use OllamaEmbeddings here.
     #
-    # We use:
+    # RAGAS 0.4.3 Collections/modern embedding validation rejects the
+    # LangChain OllamaEmbeddings object.
     #
-    #     user_input
-    #     retrieved_contexts
-    #     response
-    #     reference
+    # The legacy AnswerRelevancy metric can use this RAGAS-native
+    # HuggingFace embedding implementation.
+    # ------------------------------------------------------------------------
+
+    ragas_embeddings = HuggingFaceEmbeddings(
+        model="sentence-transformers/all-MiniLM-L6-v2"
+    )
+
+    # ------------------------------------------------------------------------
+    # Configure legacy RAGAS metrics
+    # ------------------------------------------------------------------------
     #
-    # instead of the older:
+    # These metric objects are the ones accepted by ragas.evaluate()
+    # in this environment.
     #
-    #     question
-    #     contexts
-    #     answer
-    #     ground_truth
+    # We explicitly attach the LLM and embeddings to the metrics.
+    # ------------------------------------------------------------------------
+
+    faithfulness.llm = judge_llm
+
+    answer_relevancy.llm = judge_llm
+    answer_relevancy.embeddings = ragas_embeddings
+
+    context_precision.llm = judge_llm
+    context_recall.llm = judge_llm
+
+    # ------------------------------------------------------------------------
+    # Prepare dataset
+    # ------------------------------------------------------------------------
     #
-    # This makes the mapping explicit.
+    # RAGAS expects these fields for the metrics we are evaluating:
     #
+    #   user_input
+    #   retrieved_contexts
+    #   response
+    #   reference
+    #
+    # Your benchmark cases use:
+    #
+    #   question
+    #   contexts
+    #   answer
+    #   ground_truth
+    #
+    # Therefore we explicitly map them here.
+    # ------------------------------------------------------------------------
 
     dataset_rows = []
 
@@ -500,26 +535,41 @@ def run_ragas(cases):
     ]
 
     # ------------------------------------------------------------------------
+    # Diagnostic information
+    # ------------------------------------------------------------------------
+
+    print("\nDEBUG METRICS:")
+
+    for name, metric, needs_reference in metric_specs:
+        print(
+            f"  {name}: "
+            f"{type(metric)} | "
+            f"reference={needs_reference}"
+        )
+
+    # ------------------------------------------------------------------------
     # Evaluate
     # ------------------------------------------------------------------------
 
     print("\nRunning RAGAS evaluation...")
-    print("This uses qwen2.5:3b as the judge.")
-    print("Ollama must remain running during evaluation.\n")
+    print(
+        f"This uses {OLLAMA_MODEL} as the judge."
+    )
+    print(
+        "Ollama must remain running during evaluation.\n"
+    )
 
     start = time.perf_counter()
 
     result = evaluate(
         dataset,
         metrics=metrics,
-        llm=judge_llm,
 
         # Serial execution is intentional.
         #
-        # A single local Qwen/Ollama instance is being used.
-        #
-        # Running many judge calls simultaneously can overload the
-        # local model and makes the benchmark less reproducible.
+        # We are using one local Ollama/Qwen instance.
+        # This avoids sending multiple simultaneous requests
+        # to the local judge and makes the benchmark more reproducible.
         run_config=__import__(
             "ragas.run_config",
             fromlist=["RunConfig"],
@@ -527,10 +577,8 @@ def run_ragas(cases):
             max_workers=1,
         ),
 
-        # Very important for debugging.
-        #
-        # If a metric fails, raise the actual exception instead of
-        # silently recording NaN.
+        # Raise the actual metric exception instead of silently
+        # converting failures into NaN values.
         raise_exceptions=True,
     )
 
