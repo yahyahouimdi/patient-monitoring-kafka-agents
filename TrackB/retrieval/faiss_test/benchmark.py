@@ -15,6 +15,7 @@ from benchmark_common import (  # noqa: E402
     EMBEDDING_MODEL_NAME,
     TOP_K,
     append_result_row,
+    build_timed_query_plan,
     encode_texts,
     elapsed_seconds,
     format_result_texts,
@@ -50,9 +51,15 @@ def run_benchmark() -> BenchmarkResult:
     index.add(np.ascontiguousarray(document_embeddings, dtype=np.float32))
     index_creation_s = elapsed_seconds(start)
 
+    # Warm-up: untimed first query (first FAISS search can pay a one-off
+    # cache/allocation cost that would otherwise bias the P99 estimate).
+    warmup_embedding = encode_texts(model, [queries[0]["query"]])
+    index.search(np.ascontiguousarray(warmup_embedding, dtype=np.float32), TOP_K)
+
+    timed_queries = build_timed_query_plan(queries)
     query_latencies_ms: list[float] = []
     query_results: list[dict] = []
-    for query_item in queries:
+    for position, query_item in enumerate(timed_queries):
         query_text = query_item["query"]
         query_embedding = encode_texts(model, [query_text])
 
@@ -61,14 +68,15 @@ def run_benchmark() -> BenchmarkResult:
         latency_ms = to_ms(elapsed_seconds(query_start))
         query_latencies_ms.append(latency_ms)
 
-        matched_documents = [document_texts[i] for i in indices[0] if i >= 0]
-        query_results.append(
-            {
-                "query": query_text,
-                "latency_ms": latency_ms,
-                "results": format_result_texts(matched_documents, TOP_K),
-            }
-        )
+        if position < len(queries):
+            matched_documents = [document_texts[i] for i in indices[0] if i >= 0]
+            query_results.append(
+                {
+                    "query": query_text,
+                    "latency_ms": latency_ms,
+                    "results": format_result_texts(matched_documents, TOP_K),
+                }
+            )
 
     return BenchmarkResult(
         store="FAISS",

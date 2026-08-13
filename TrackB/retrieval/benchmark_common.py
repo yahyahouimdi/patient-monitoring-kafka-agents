@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,8 +15,13 @@ BASE_DIR = Path(__file__).resolve().parent
 TRACKB_DIR = BASE_DIR.parent
 DOCS_DIR = TRACKB_DIR / "docs"
 RESULTS_CSV = DOCS_DIR / "results.csv"
+RAW_LATENCIES_DIR = DOCS_DIR / "raw_latencies"
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 TOP_K = 3
+
+# Task 1: 7 base queries * 30 repeats = ~210 samples per corpus size,
+# enough to estimate P99 (need >=100 samples for a stable 99th percentile).
+QUERY_REPEATS = 30
 
 
 @dataclass
@@ -33,14 +39,59 @@ class BenchmarkResult:
             return 0.0
         return float(sum(self.query_latencies_ms) / len(self.query_latencies_ms))
 
+    @property
+    def stdev_latency_ms(self) -> float:
+        if len(self.query_latencies_ms) < 2:
+            return 0.0
+        return float(np.std(self.query_latencies_ms, ddof=1))
+
+    def percentile_ms(self, pct: float) -> float:
+        if not self.query_latencies_ms:
+            return 0.0
+        return float(np.percentile(self.query_latencies_ms, pct))
+
+    @property
+    def min_latency_ms(self) -> float:
+        return float(min(self.query_latencies_ms)) if self.query_latencies_ms else 0.0
+
+    @property
+    def max_latency_ms(self) -> float:
+        return float(max(self.query_latencies_ms)) if self.query_latencies_ms else 0.0
+
 
 def ensure_results_file() -> None:
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
     if not RESULTS_CSV.exists():
         RESULTS_CSV.write_text(
-            "store,documents_indexed,embedding_model,index_creation_s,average_latency_ms,query_count,recorded_at\n",
+            "store,documents_indexed,embedding_model,index_creation_s,"
+            "average_latency_ms,stdev_latency_ms,min_latency_ms,"
+            "p50_latency_ms,p95_latency_ms,p99_latency_ms,max_latency_ms,"
+            "query_count,recorded_at\n",
             encoding="utf-8",
         )
+
+
+def save_raw_latencies(result: "BenchmarkResult") -> Path:
+    """Persist every individual latency sample (not just the mean) so that
+    Task 3 (P50/P99 plots, boxplots) can be generated from real data instead
+    of a single averaged number."""
+    RAW_LATENCIES_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = RAW_LATENCIES_DIR / f"{result.store.lower()}_{result.documents_indexed}.json"
+    out_path.write_text(
+        json.dumps(
+            {
+                "store": result.store,
+                "documents_indexed": result.documents_indexed,
+                "embedding_model": result.embedding_model,
+                "index_creation_s": result.index_creation_s,
+                "recorded_at": now_iso(),
+                "query_latencies_ms": result.query_latencies_ms,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return out_path
 
 
 def load_documents():
@@ -78,9 +129,24 @@ def append_result_row(result: BenchmarkResult) -> None:
             result.embedding_model,
             f"{result.index_creation_s:.6f}",
             f"{result.average_latency_ms:.3f}",
+            f"{result.stdev_latency_ms:.3f}",
+            f"{result.min_latency_ms:.3f}",
+            f"{result.percentile_ms(50):.3f}",
+            f"{result.percentile_ms(95):.3f}",
+            f"{result.percentile_ms(99):.3f}",
+            f"{result.max_latency_ms:.3f}",
             len(result.query_latencies_ms),
             now_iso(),
         ])
+    save_raw_latencies(result)
+
+
+def build_timed_query_plan(queries: Sequence[dict], repeats: int = QUERY_REPEATS) -> list[dict]:
+    """Cycle the base query set `repeats` times so each store answers the
+    same ~200-query workload. One extra untimed warm-up query is handled
+    separately in each benchmark script (first query is often slower due to
+    lazy index/connection setup and would otherwise bias P99 upward)."""
+    return [query for _ in range(repeats) for query in queries]
 
 
 def print_report(result: BenchmarkResult) -> None:
