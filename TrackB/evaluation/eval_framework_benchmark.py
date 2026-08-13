@@ -1,57 +1,70 @@
 """
 eval_framework_benchmark.py
 
-RAGAS-only benchmark against THIS project's real data:
-loader.py's load_documents() / load_queries() (patient_profiles.json +
-medical_notes.json + queries/test_queries.json), using a local
-embedding-based retriever and qwen2.5:3b (via Ollama) as the judge
-model -- fully self-hosted, no OpenAI key needed.
+RAGAS benchmark against THIS project's real data.
 
-This mirrors what Tier 2 will actually do: retrieve context, generate
-a grounded answer with the local reasoning model, then score it.
+Data sources:
+    retrieval/loader.py
+        - patient_profiles.json
+        - medical_notes.json
+        - queries/test_queries.json
 
-Setup:
-    ollama pull qwen2.5:3b
-    ollama serve                      # if not already running
-    pip install ragas sentence-transformers langchain-community \
-                langchain-ollama requests --break-system-packages
+Pipeline:
+    1. Load the project's real documents and test queries.
+    2. Retrieve top-K documents using all-MiniLM-L6-v2.
+    3. Generate an answer using qwen2.5:3b through Ollama.
+    4. Evaluate the generated RAG answers with RAGAS.
+    5. Save one CSV row per metric.
+
+The entire evaluation is local:
+    - Embeddings: sentence-transformers
+    - Answer generation: Ollama / qwen2.5:3b
+    - RAGAS judge: Ollama / qwen2.5:3b
+
+No OpenAI API key is required.
+
+IMPORTANT:
+    RAGAS 0.4.x uses the newer llm_factory() API.
+    Do not use the old LangchainLLMWrapper /
+    LangchainEmbeddingsWrapper integration here.
+
+Known limitation:
+    test_queries.json "expected" is a list of keywords/phrases rather
+    than a complete reference answer. We join those phrases into one
+    reference string for reference-based metrics. Therefore:
+        - context_precision
+        - context_recall
+
+    should be treated as approximate indicators rather than authoritative
+    ground-truth measurements.
+
+Another limitation:
+    qwen2.5:3b is used both to generate the answer and to judge it.
+    This is useful for a fully self-hosted experiment but is weaker than
+    using an independent, larger judge model.
+
+Windows:
+    WindowsSelectorEventLoopPolicy is configured before RAGAS is imported
+    to avoid asyncio timeout/event-loop problems.
 
 Usage:
-    python eval_framework_benchmark.py
-    (run from the same directory as loader.py)
 
-    IMPORTANT: do not name this file ragas.py (or json.py, requests.py,
-    etc.) -- a script named the same as a package it imports will shadow
-    that package, since Python checks the script's own directory before
-    site-packages. This exact bug caused "cannot import name 'evaluate'
-    from 'ragas'" earlier when this file was named ragas.py.
+    Make sure Ollama is running:
 
-Output:
-    results_eval_frameworks.csv -- one row per metric, appended.
+        ollama serve
 
-Known limitation, note this in your write-up: test_queries.json's
-"expected" field is a list of keyword phrases, not a full reference
-answer. It's joined into a single string here to stand in for
-ground_truth on the metrics that need one (context_precision,
-context_recall) -- treat those specific scores as approximate, not
-authoritative, and say so.
+    Make sure the model exists:
 
-Also note: qwen2.5:3b is used as BOTH the answer-generator and the
-judge model here, to stay fully self-hosted per the project's "no
-external API" constraint. Using the same (small) model to grade its
-own output is weaker evidence than an independent, larger judge --
-flag this explicitly as a limitation in the report rather than
-treating the scores as ground truth.
+        ollama pull qwen2.5:3b
 
-Fix vs. the original combined script: all four RAGAS metrics are now
-scored in a SINGLE evaluate() call instead of one evaluate() call per
-metric in a loop. Calling ragas.evaluate() repeatedly in one process
-was causing internal event-loop reuse failures that ragas silently
-swallowed and reported as nan (ragas's default RunConfig does not
-raise on a metric failure -- it just records nan for that row). This
-version also sets raise_exceptions=True so a real failure surfaces as
-a traceback instead of a silent nan.
+    Then:
+
+        python eval_framework_benchmark.py
 """
+
+# ============================================================================
+# Standard library
+# ============================================================================
 
 import asyncio
 import csv
@@ -60,238 +73,738 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+
+# ============================================================================
+# Windows asyncio compatibility
+# ============================================================================
+#
+# This MUST happen before RAGAS creates/uses an asyncio event loop.
+#
+
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(
+        asyncio.WindowsSelectorEventLoopPolicy()
+    )
+
+
+# ============================================================================
+# Third-party imports
+# ============================================================================
+
+import numpy as np
 import requests
 
-# Windows' default ProactorEventLoop is incompatible with ragas's internal
-# asyncio timeout handling (causes "RuntimeError: Timeout should be used
-# inside a task" and silently nan's out every score). Must be set before
-# any event loop is created, hence right after stdlib imports.
-if sys.platform.startswith("win"):
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-BASE = Path(__file__).parent
-RETRIEVAL_DIR = BASE.parent / "retrieval"  # loader.py lives in the sibling retrieval/ folder
-sys.path.insert(0, str(RETRIEVAL_DIR))
+# ============================================================================
+# Project paths
+# ============================================================================
 
-from loader import load_documents, load_queries  # noqa: E402
+BASE = Path(__file__).resolve().parent
+TRACKB_DIR = BASE.parent
+
+# TrackB/
+#   retrieval/
+#       loader.py
+#   evaluation/
+#       eval_framework_benchmark.py
+#
+# Adding TrackB/ allows:
+#
+#     from retrieval.loader import ...
+#
+sys.path.insert(0, str(TRACKB_DIR))
+
+
+from retrieval.loader import load_documents, load_queries  # noqa: E402
+
+
+# ============================================================================
+# Configuration
+# ============================================================================
 
 OLLAMA_MODEL = "qwen2.5:3b"
+
+# Ollama's normal API
 OLLAMA_BASE_URL = "http://localhost:11434"
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"   # same model used in the vector-store benchmark
+
+# Ollama's OpenAI-compatible API.
+# RAGAS llm_factory() can use this interface.
+OLLAMA_OPENAI_URL = "http://localhost:11434/v1"
+
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+
 TOP_K = 3
 
 RESULTS_PATH = BASE / "results_eval_frameworks.csv"
 
 
+# ============================================================================
+# Utilities
+# ============================================================================
+
 def now():
+    """Return the current UTC timestamp."""
     return datetime.now(timezone.utc).isoformat()
 
 
-# --------------------------------------------------------------------------
-# Retrieval: reuse the same embedding model as the vector-store benchmark,
-# in-memory, so this script doesn't depend on which store you ended up
-# wiring into the real retrieval service.
-# --------------------------------------------------------------------------
+# ============================================================================
+# Retrieval
+# ============================================================================
 
 def build_retriever():
+    """
+    Build an in-memory embedding retriever.
+
+    The same embedding model used by the vector-store benchmark is used:
+
+        all-MiniLM-L6-v2
+
+    Returns:
+        retrieve(query, k=TOP_K)
+
+    which returns:
+
+        contexts, document_ids
+    """
+
     from sentence_transformers import SentenceTransformer
-    import numpy as np
+
+    print(f"Loading embedding model: {EMBEDDING_MODEL}")
 
     model = SentenceTransformer(EMBEDDING_MODEL)
+
     docs = load_documents()
+
+    if not docs:
+        raise RuntimeError("load_documents() returned no documents.")
+
     texts = [d["text"] for d in docs]
-    doc_embeddings = model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
+
+    print(f"Loaded {len(texts)} documents.")
+
+    print("Computing document embeddings...")
+
+    doc_embeddings = model.encode(
+        texts,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+        show_progress_bar=True,
+    )
 
     def retrieve(query, k=TOP_K):
-        q_emb = model.encode([query], convert_to_numpy=True, normalize_embeddings=True)[0]
+        """
+        Retrieve the top-k most similar documents using cosine similarity.
+        """
+
+        q_emb = model.encode(
+            [query],
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+        )[0]
+
         scores = doc_embeddings @ q_emb
+
         top_idx = np.argsort(-scores)[:k]
-        return [texts[i] for i in top_idx], [docs[i]["id"] for i in top_idx]
+
+        contexts = [texts[i] for i in top_idx]
+        doc_ids = [docs[i]["id"] for i in top_idx]
+
+        return contexts, doc_ids
 
     return retrieve
 
 
-# --------------------------------------------------------------------------
-# Generation: call qwen2.5:3b directly through Ollama's HTTP API, the same
-# way Tier 2's reason_about() will eventually call the reasoning model.
-# --------------------------------------------------------------------------
+# ============================================================================
+# Ollama answer generation
+# ============================================================================
 
 def generate_answer(query, contexts):
-    context_block = "\n".join(f"- {c}" for c in contexts)
-    prompt = (
-        "Answer the question using only the context below. Be concise.\n\n"
-        f"Context:\n{context_block}\n\n"
-        f"Question: {query}\nAnswer:"
+    """
+    Generate a grounded answer using qwen2.5:3b through Ollama.
+    """
+
+    context_block = "\n".join(
+        f"- {context}"
+        for context in contexts
     )
-    resp = requests.post(
+
+    prompt = (
+        "You are a medical information assistant evaluating a retrieval "
+        "system.\n\n"
+        "Answer the question using ONLY the context below.\n"
+        "Do not invent information that is not present in the context.\n"
+        "If the context does not contain enough information, say so.\n"
+        "Be concise.\n\n"
+        f"Context:\n{context_block}\n\n"
+        f"Question: {query}\n\n"
+        "Answer:"
+    )
+
+    response = requests.post(
         f"{OLLAMA_BASE_URL}/api/generate",
-        json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
+        json={
+            "model": OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": 0,
+            },
+        },
         timeout=120,
     )
-    resp.raise_for_status()
-    return resp.json()["response"].strip()
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    answer = data.get("response", "").strip()
+
+    if not answer:
+        raise RuntimeError(
+            f"Ollama returned an empty answer for query: {query!r}"
+        )
+
+    return answer
 
 
-# --------------------------------------------------------------------------
-# Build the evaluation dataset: for each test query, retrieve, generate,
-# and package it as {question, contexts, answer, ground_truth}.
-# --------------------------------------------------------------------------
+# ============================================================================
+# Build evaluation cases
+# ============================================================================
 
 def build_eval_cases():
+    """
+    Build the RAGAS evaluation dataset.
+
+    Each case contains:
+
+        question
+        contexts
+        retrieved_ids
+        answer
+        ground_truth
+    """
+
     retrieve = build_retriever()
+
     queries = load_queries()
+
+    if not queries:
+        raise RuntimeError("load_queries() returned no queries.")
+
+    print(f"Loaded {len(queries)} test queries.")
 
     cases = []
     skipped = 0
+
     for q in queries:
+
         question = q["query"]
+
         expected = q.get("expected", [])
+
+        # Reference-based metrics require a usable reference.
         if not expected:
-            # context_precision / context_recall need a non-empty ground_truth;
-            # an empty one silently degrades those two metrics rather than
-            # failing loudly, so drop these cases and say how many were dropped.
             skipped += 1
             continue
+
         contexts, doc_ids = retrieve(question)
-        answer = generate_answer(question, contexts)
-        ground_truth = "; ".join(expected)  # see limitation note above
-        cases.append({
-            "question": question,
-            "contexts": contexts,
-            "retrieved_ids": doc_ids,
-            "answer": answer,
-            "ground_truth": ground_truth,
-        })
-        print(f"  [{len(cases)}/{len(queries)}] {question!r} -> retrieved {doc_ids}")
+
+        answer = generate_answer(
+            question,
+            contexts,
+        )
+
+        # IMPORTANT:
+        #
+        # The project's expected field is a list of keywords/phrases,
+        # not a complete reference answer.
+        #
+        # We therefore join them into one string.
+        #
+        ground_truth = "; ".join(expected)
+
+        cases.append(
+            {
+                "question": question,
+                "contexts": contexts,
+                "retrieved_ids": doc_ids,
+                "answer": answer,
+                "ground_truth": ground_truth,
+            }
+        )
+
+        print(
+            f"  [{len(cases)}/{len(queries)}] "
+            f"{question!r} "
+            f"-> retrieved {doc_ids}"
+        )
+
+        print(f"      Answer: {answer}")
 
     if skipped:
-        print(f"  Skipped {skipped} quer{'y' if skipped == 1 else 'ies'} with empty "
-              f"'expected' (no usable ground_truth for reference-based metrics).")
+        print(
+            f"\nSkipped {skipped} quer"
+            f"{'y' if skipped == 1 else 'ies'} "
+            "with empty 'expected'."
+        )
+
     return cases
 
 
-# --------------------------------------------------------------------------
-# RAGAS, judged by qwen2.5:3b via LangChain's Ollama wrapper.
-# All four metrics are scored in a single evaluate() call -- calling
-# evaluate() repeatedly in a loop (once per metric) is what caused the
-# earlier silent nan failures.
-# --------------------------------------------------------------------------
+# ============================================================================
+# RAGAS
+# ============================================================================
 
 def run_ragas(cases):
-    from datasets import Dataset
-    from langchain_ollama import ChatOllama
-    from langchain_community.embeddings import HuggingFaceEmbeddings
-    from ragas import evaluate
-    from ragas.run_config import RunConfig
-    from ragas.llms import LangchainLLMWrapper
-    from ragas.embeddings import LangchainEmbeddingsWrapper
-    from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
+    """
+    Evaluate all four RAGAS metrics.
 
-    judge_llm = LangchainLLMWrapper(ChatOllama(model=OLLAMA_MODEL, base_url=OLLAMA_BASE_URL))
-    judge_embeddings = LangchainEmbeddingsWrapper(
-        HuggingFaceEmbeddings(model_name=f"sentence-transformers/{EMBEDDING_MODEL}")
+    RAGAS 0.4.x:
+        - uses llm_factory()
+        - uses newer metric APIs
+        - no LangchainLLMWrapper required
+
+    Ollama is accessed through its OpenAI-compatible endpoint.
+    """
+
+    # ------------------------------------------------------------------------
+    # Imports
+    # ------------------------------------------------------------------------
+
+    from datasets import Dataset
+    from openai import OpenAI
+
+    import ragas
+
+    from ragas import evaluate
+    from ragas.llms import llm_factory
+
+    from ragas.metrics import (
+        faithfulness,
+        answer_relevancy,
+        context_precision,
+        context_recall,
     )
 
-    dataset = Dataset.from_list([
-        {
-            "question": c["question"],
-            "contexts": c["contexts"],
-            "answer": c["answer"],
-            "ground_truth": c["ground_truth"],
-        }
-        for c in cases
-    ])
+    # ------------------------------------------------------------------------
+    # Print diagnostic information
+    # ------------------------------------------------------------------------
+
+    print(f"\nRAGAS version: {ragas.__version__}")
+    print(f"RAGAS location: {ragas.__file__}")
+
+    # ------------------------------------------------------------------------
+    # Build Ollama OpenAI-compatible client
+    # ------------------------------------------------------------------------
+
+    print("\nConnecting RAGAS judge to Ollama...")
+
+    ollama_client = OpenAI(
+        api_key="ollama",
+        base_url=OLLAMA_OPENAI_URL,
+    )
+
+    # ------------------------------------------------------------------------
+    # Build RAGAS LLM
+    # ------------------------------------------------------------------------
+    #
+    # RAGAS 0.4 recommends llm_factory() instead of
+    # LangchainLLMWrapper.
+    #
+    # Ollama exposes an OpenAI-compatible endpoint.
+    #
+
+    judge_llm = llm_factory(
+        OLLAMA_MODEL,
+        provider="openai",
+        client=ollama_client,
+    )
+
+    print(
+        f"RAGAS judge configured: "
+        f"{OLLAMA_MODEL} via Ollama"
+    )
+
+    # ------------------------------------------------------------------------
+    # Dataset
+    # ------------------------------------------------------------------------
+    #
+    # RAGAS legacy evaluate() expects the standard RAG dataset field names.
+    #
+    # We use:
+    #
+    #     user_input
+    #     retrieved_contexts
+    #     response
+    #     reference
+    #
+    # instead of the older:
+    #
+    #     question
+    #     contexts
+    #     answer
+    #     ground_truth
+    #
+    # This makes the mapping explicit.
+    #
+
+    dataset_rows = []
+
+    for case in cases:
+        dataset_rows.append(
+            {
+                "user_input": case["question"],
+                "retrieved_contexts": case["contexts"],
+                "response": case["answer"],
+                "reference": case["ground_truth"],
+            }
+        )
+
+    dataset = Dataset.from_list(dataset_rows)
+
+    print(
+        f"\nPrepared RAGAS dataset with "
+        f"{len(dataset_rows)} cases."
+    )
+
+    # ------------------------------------------------------------------------
+    # Metrics
+    # ------------------------------------------------------------------------
 
     metric_specs = [
-        ("faithfulness", faithfulness, False),
-        ("answer_relevancy", answer_relevancy, False),
-        ("context_precision", context_precision, True),
-        ("context_recall", context_recall, True),
+        (
+            "faithfulness",
+            faithfulness,
+            False,
+        ),
+        (
+            "answer_relevancy",
+            answer_relevancy,
+            False,
+        ),
+        (
+            "context_precision",
+            context_precision,
+            True,
+        ),
+        (
+            "context_recall",
+            context_recall,
+            True,
+        ),
     ]
-    metrics = [m for _, m, _ in metric_specs]
+
+    metrics = [
+        metric
+        for _, metric, _ in metric_specs
+    ]
+
+    # ------------------------------------------------------------------------
+    # Evaluate
+    # ------------------------------------------------------------------------
+
+    print("\nRunning RAGAS evaluation...")
+    print("This uses qwen2.5:3b as the judge.")
+    print("Ollama must remain running during evaluation.\n")
 
     start = time.perf_counter()
+
     result = evaluate(
         dataset,
         metrics=metrics,
         llm=judge_llm,
-        embeddings=judge_embeddings,
-        # max_workers=1 runs serially -- a single local Ollama instance
-        # won't handle concurrent judge calls well.
-        run_config=RunConfig(max_workers=1),
-        # raise_exceptions=True surfaces a real traceback instead of ragas's
-        # default behaviour of writing nan and continuing silently.
-        # (moved here from RunConfig -- current ragas puts it on evaluate()
-        # itself, not on RunConfig.)
+
+        # Serial execution is intentional.
+        #
+        # A single local Qwen/Ollama instance is being used.
+        #
+        # Running many judge calls simultaneously can overload the
+        # local model and makes the benchmark less reproducible.
+        run_config=__import__(
+            "ragas.run_config",
+            fromlist=["RunConfig"],
+        ).RunConfig(
+            max_workers=1,
+        ),
+
+        # Very important for debugging.
+        #
+        # If a metric fails, raise the actual exception instead of
+        # silently recording NaN.
         raise_exceptions=True,
     )
+
     elapsed = time.perf_counter() - start
 
+    # ------------------------------------------------------------------------
+    # Convert result to DataFrame
+    # ------------------------------------------------------------------------
+
     df = result.to_pandas()
+
+    print("\nRaw RAGAS result:")
+    print(df)
+
+    # ------------------------------------------------------------------------
+    # Calculate final rows
+    # ------------------------------------------------------------------------
+
     rows = []
+
     for name, _, needs_ref in metric_specs:
-        rows.append({
-            "framework": "RAGAS", "metric": name, "requires_reference": needs_ref,
-            "score": round(float(df[name].mean()), 4),
-            "case_count": len(cases), "eval_time_s": round(elapsed, 4),
-            "judge_model": OLLAMA_MODEL, "recorded_at": now(),
-        })
+
+        if name not in df.columns:
+            raise RuntimeError(
+                f"RAGAS did not return metric column: {name}. "
+                f"Available columns: {list(df.columns)}"
+            )
+
+        values = df[name].dropna()
+
+        if len(values) == 0:
+            raise RuntimeError(
+                f"RAGAS returned no valid values for metric "
+                f"{name!r}. The metric produced only NaN values."
+            )
+
+        score = float(values.mean())
+
+        rows.append(
+            {
+                "framework": "RAGAS",
+                "metric": name,
+                "requires_reference": needs_ref,
+                "score": round(score, 4),
+                "case_count": len(cases),
+                "eval_time_s": round(elapsed, 4),
+                "judge_model": OLLAMA_MODEL,
+                "recorded_at": now(),
+            }
+        )
+
     return rows
 
 
+# ============================================================================
+# CSV output
+# ============================================================================
+
 def append_rows(rows):
+    """
+    Append evaluation results to results_eval_frameworks.csv.
+    """
+
     file_exists = RESULTS_PATH.exists()
-    with open(RESULTS_PATH, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=[
-            "framework", "metric", "requires_reference", "score",
-            "case_count", "eval_time_s", "judge_model", "recorded_at",
-        ])
+
+    with open(
+        RESULTS_PATH,
+        "a",
+        newline="",
+        encoding="utf-8",
+    ) as f:
+
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "framework",
+                "metric",
+                "requires_reference",
+                "score",
+                "case_count",
+                "eval_time_s",
+                "judge_model",
+                "recorded_at",
+            ],
+        )
+
         if not file_exists:
             writer.writeheader()
+
         writer.writerows(rows)
 
 
-def check_ollama():
-    try:
-        r = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
-        r.raise_for_status()
-        models = [m["name"] for m in r.json().get("models", [])]
-        if not any(OLLAMA_MODEL in m for m in models):
-            print(f"WARNING: {OLLAMA_MODEL} not found in `ollama list`. "
-                  f"Run: ollama pull {OLLAMA_MODEL}")
-    except requests.exceptions.RequestException:
-        print(f"WARNING: could not reach Ollama at {OLLAMA_BASE_URL}. "
-              f"Is `ollama serve` running?")
+# ============================================================================
+# Ollama health check
+# ============================================================================
 
+def check_ollama():
+    """
+    Check that Ollama is reachable and qwen2.5:3b exists.
+    """
+
+    try:
+
+        response = requests.get(
+            f"{OLLAMA_BASE_URL}/api/tags",
+            timeout=5,
+        )
+
+        response.raise_for_status()
+
+        models = [
+            model["name"]
+            for model in response.json().get(
+                "models",
+                [],
+            )
+        ]
+
+        matching_models = [
+            model
+            for model in models
+            if model.startswith(OLLAMA_MODEL)
+        ]
+
+        if not matching_models:
+
+            print(
+                f"\nWARNING: {OLLAMA_MODEL} "
+                "was not found in Ollama."
+            )
+
+            print(
+                f"Run:\n    ollama pull {OLLAMA_MODEL}\n"
+            )
+
+            return False
+
+        print(
+            f"Ollama OK: {matching_models[0]}"
+        )
+
+        return True
+
+    except requests.exceptions.RequestException as exc:
+
+        print(
+            f"\nERROR: Could not reach Ollama at "
+            f"{OLLAMA_BASE_URL}"
+        )
+
+        print(
+            "Make sure Ollama is running:"
+        )
+
+        print(
+            "    ollama serve"
+        )
+
+        print(
+            f"\nDetails: {exc}"
+        )
+
+        return False
+
+
+# ============================================================================
+# Main
+# ============================================================================
 
 def main():
-    check_ollama()
 
-    print("Building retrieval + generation cases from the project's real "
-          "knowledge base and test queries...")
+    print("=" * 70)
+    print("TrackB RAGAS Evaluation Benchmark")
+    print("=" * 70)
+
+    # ------------------------------------------------------------------------
+    # Ollama
+    # ------------------------------------------------------------------------
+
+    if not check_ollama():
+        raise SystemExit(
+            "\nOllama is unavailable. "
+            "Start Ollama and make sure the model exists."
+        )
+
+    # ------------------------------------------------------------------------
+    # Build cases
+    # ------------------------------------------------------------------------
+
+    print(
+        "\nBuilding retrieval + generation cases "
+        "from the project's real knowledge base..."
+    )
+
     cases = build_eval_cases()
 
     if not cases:
-        print("No usable cases (all queries had empty 'expected') -- nothing to evaluate.")
+
+        print(
+            "\nNo usable cases."
+        )
+
+        print(
+            "All queries may have empty 'expected' fields."
+        )
+
         return
 
-    print("\nRunning RAGAS...")
+    # ------------------------------------------------------------------------
+    # RAGAS
+    # ------------------------------------------------------------------------
+
+    print("\n" + "=" * 70)
+    print("Running RAGAS")
+    print("=" * 70)
+
     try:
+
         rows = run_ragas(cases)
-    except Exception as e:
-        print(f"  RAGAS run failed: {e}")
+
+    except Exception as exc:
+
+        print(
+            "\nRAGAS evaluation FAILED."
+        )
+
+        print(
+            f"Error type: {type(exc).__name__}"
+        )
+
+        print(
+            f"Error: {exc}"
+        )
+
         raise
 
-    if rows:
-        append_rows(rows)
-        print(f"\nRecorded {len(rows)} rows to {RESULTS_PATH.name}")
-        for row in rows:
-            print(f"  {row['framework']:10s} {row['metric']:22s} "
-                  f"ref={row['requires_reference']!s:5s} score={row['score']} "
-                  f"time={row['eval_time_s']}s")
-    else:
-        print("No results recorded -- check the errors above.")
+    # ------------------------------------------------------------------------
+    # Save results
+    # ------------------------------------------------------------------------
 
+    if rows:
+
+        append_rows(rows)
+
+        print(
+            f"\nRecorded {len(rows)} rows to:"
+        )
+
+        print(
+            f"    {RESULTS_PATH}"
+        )
+
+        print("\nResults:")
+
+        for row in rows:
+
+            print(
+                f"  {row['framework']:8s} "
+                f"{row['metric']:22s} "
+                f"ref={str(row['requires_reference']):5s} "
+                f"score={row['score']:.4f} "
+                f"time={row['eval_time_s']:.2f}s"
+            )
+
+    else:
+
+        print(
+            "\nNo results were recorded."
+        )
+
+
+# ============================================================================
+# Entry point
+# ============================================================================
 
 if __name__ == "__main__":
     main()
