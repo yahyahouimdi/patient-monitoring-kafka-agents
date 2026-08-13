@@ -1,0 +1,12 @@
+| Feature                             | FAISS                  | Chroma       | Qdrant         |
+| ----------------------------------- | ---------------------- | ------------ | -------------- |
+| Vector search                       | ✅ Excellent            | ✅            | ✅              |
+| Very fast                           | ✅ Excellent            | ✅            | ✅              |
+| Metadata filtering                  | ⚠️ Build yourself      | ✅            | ✅              |
+| Patient isolation                   | ⚠️ More responsibility | ✅            | ✅              |
+| Persistence                         | ⚠️ You manage more     | ✅            | ✅              |
+| Standalone DB service               | ❌                      | ⚠️           | ✅              |
+| Snapshots/backups                   | ⚠️ Build/manage        | More limited | ✅              |
+| Easy prototype                      | ✅                      | ✅ Excellent  | ✅              |
+| Production architecture             | ⚠️ More work           | ⚠️           | ✅ Excellent    |
+| Good choice for our medical system | ⚠️                     | ✅            | **✅ Best fit** |
