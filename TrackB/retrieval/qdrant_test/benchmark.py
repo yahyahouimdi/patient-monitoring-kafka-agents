@@ -14,6 +14,7 @@ from benchmark_common import (  # noqa: E402
     EMBEDDING_MODEL_NAME,
     TOP_K,
     append_result_row,
+    build_timed_query_plan,
     encode_texts,
     elapsed_seconds,
     format_result_texts,
@@ -72,9 +73,15 @@ def run_benchmark() -> BenchmarkResult:
     )
     index_creation_s = elapsed_seconds(start)
 
+    # Warm-up: untimed first query so client/collection warm-up cost doesn't
+    # bias the P99 estimate.
+    warmup_embedding = encode_texts(model, [queries[0]["query"]])[0].tolist()
+    client.query_points(collection_name=collection_name, query=warmup_embedding, limit=TOP_K, with_payload=True)
+
+    timed_queries = build_timed_query_plan(queries)
     query_latencies_ms: list[float] = []
     query_results: list[dict] = []
-    for query_item in queries:
+    for position, query_item in enumerate(timed_queries):
         query_text = query_item["query"]
         query_embedding = encode_texts(model, [query_text])[0].tolist()
 
@@ -88,18 +95,19 @@ def run_benchmark() -> BenchmarkResult:
         latency_ms = to_ms(elapsed_seconds(query_start))
         query_latencies_ms.append(latency_ms)
 
-        matched_documents = [
-            point.payload["text"]
-            for point in response.points
-            if point.payload and "text" in point.payload
-        ]
-        query_results.append(
-            {
-                "query": query_text,
-                "latency_ms": latency_ms,
-                "results": format_result_texts(matched_documents, TOP_K),
-            }
-        )
+        if position < len(queries):
+            matched_documents = [
+                point.payload["text"]
+                for point in response.points
+                if point.payload and "text" in point.payload
+            ]
+            query_results.append(
+                {
+                    "query": query_text,
+                    "latency_ms": latency_ms,
+                    "results": format_result_texts(matched_documents, TOP_K),
+                }
+            )
 
     return BenchmarkResult(
         store="Qdrant",
