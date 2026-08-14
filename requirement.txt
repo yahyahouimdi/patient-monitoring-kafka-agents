@@ -1,0 +1,296 @@
+# ============================================================
+# Web API / Server
+# ============================================================
+fastapi==0.141.1
+starlette==1.6.0
+uvicorn==0.52.1
+sse-starlette==3.4.8
+python-multipart==0.0.32
+python-dotenv==1.2.2
+aiofiles==24.1.0
+httptools==0.8.0
+watchfiles==1.2.0
+
+# ============================================================
+# Data Validation / Configuration
+# ============================================================
+pydantic==2.12.5
+pydantic-core==2.41.5
+pydantic-settings==2.15.0
+annotated-types==0.8.0
+annotated-doc==0.0.5
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+typing-inspect==0.9.0
+dataclasses-json==0.6.7
+marshmallow==3.26.2
+
+# ============================================================
+# AI / LLM / Agents
+# ============================================================
+openai==2.54.0
+ollama==0.6.2
+autogen==0.14.1
+autogen-agentchat==0.7.5
+autogen-core==0.7.5
+pyautogen==0.10.0
+crewai==1.15.14
+crewai-cli==1.15.14
+crewai-core==1.15.14
+instructor==1.15.4
+mcp==1.28.1
+
+# ============================================================
+# LangChain / LangGraph
+# ============================================================
+langchain==1.3.15
+langchain-classic==1.0.8
+langchain-community==0.4.1
+langchain-core==1.5.4
+langchain-ollama==1.1.0
+langchain-openai==1.5.0
+langchain-protocol==0.0.18
+langchain-text-splitters==1.1.2
+langgraph==1.2.11
+langgraph-checkpoint==4.2.0
+langgraph-prebuilt==1.1.0
+langgraph-sdk==0.4.2
+langsmith==0.10.18
+
+# ============================================================
+# Embeddings / Transformers / NLP
+# ============================================================
+sentence-transformers==5.7.0
+transformers==5.14.1
+tokenizers==0.22.2
+huggingface_hub==1.27.0
+safetensors==0.8.0
+onnxruntime==1.28.0
+tiktoken==0.13.0
+regex==2026.1.15
+lark==1.3.1
+
+# ============================================================
+# Vector Databases / Retrieval
+# ============================================================
+chromadb==1.1.1
+qdrant-client==1.19.0
+lancedb==0.30.0
+lance-namespace==0.9.0
+lance-namespace-urllib3-client==0.9.0
+faiss-cpu==1.15.0
+mmh3==5.2.1
+
+# ============================================================
+# RAG / Evaluation
+# ============================================================
+ragas==0.4.3
+
+# ============================================================
+# Machine Learning / Scientific Computing
+# ============================================================
+torch==2.13.0
+numpy==2.5.2
+scipy==1.18.0
+scikit-learn==1.9.0
+scikit-network==0.33.5
+pandas==3.0.5
+networkx==3.6.1
+sympy==1.14.0
+mpmath==1.3.0
+
+# ============================================================
+# Data Processing / Datasets
+# ============================================================
+datasets==5.0.1
+pyarrow==25.0.0
+fsspec==2026.6.0
+dill==0.4.1
+multiprocess==0.70.19
+joblib==1.5.3
+xxhash==4.0.0
+zstandard==0.25.0
+
+# ============================================================
+# Messaging / Distributed Systems
+# ============================================================
+kafka-python==3.0.10
+cel-python==0.5.0
+
+# ============================================================
+# Database / SQL
+# ============================================================
+SQLAlchemy==2.0.52
+aiosqlite==0.21.0
+greenlet==3.5.5
+
+# ============================================================
+# HTTP / Networking
+# ============================================================
+requests==2.34.2
+requests-oauthlib==2.0.0
+requests-toolbelt==1.0.0
+aiohttp==3.14.3
+aiosignal==1.4.0
+httpx==0.28.1
+httpcore==1.0.9
+httpcore2==2.10.0
+httpx-sse==0.4.3
+httpx2==2.10.0
+websocket-client==1.9.0
+websockets==15.0.1
+urllib3==2.7.0
+certifi==2026.7.22
+charset-normalizer==3.5.0
+idna==3.18
+h11==0.16.0
+h2==4.4.1
+hpack==4.2.0
+hyperframe==6.1.0
+multidict==6.7.1
+yarl==1.24.5
+frozenlist==1.8.0
+propcache==0.5.2
+anyio==4.14.2
+sniffio==1.3.1
+truststore==0.10.4
+
+# ============================================================
+# Kubernetes / Cloud / Google
+# ============================================================
+kubernetes==36.0.3
+google-re2==1.1.20251105
+googleapis-common-protos==1.75.0
+oauthlib==3.3.1
+jmespath==1.1.0
+
+# ============================================================
+# Observability
+# ============================================================
+opentelemetry-api==1.42.1
+opentelemetry-sdk==1.42.1
+opentelemetry-proto==1.42.1
+opentelemetry-semantic-conventions==0.63b1
+opentelemetry-exporter-otlp-proto-common==1.42.1
+opentelemetry-exporter-otlp-proto-grpc==1.42.1
+opentelemetry-exporter-otlp-proto-http==1.42.1
+posthog==5.4.0
+
+# ============================================================
+# PDF / Documents / Files
+# ============================================================
+pdfminer.six==20260107
+pdfplumber==0.11.10
+pypdfium2==5.12.1
+openpyxl==3.1.5
+et_xmlfile==2.0.0
+PyYAML==6.0.3
+json5==0.10.0
+json_repair==0.60.1
+jsonref==1.1.0
+jsonpatch==1.33
+jsonpointer==3.1.1
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+referencing==0.37.0
+rpds-py==2026.6.3
+
+# ============================================================
+# Visualization
+# ============================================================
+matplotlib==3.11.1
+contourpy==1.3.3
+cycler==0.12.1
+fonttools==4.63.0
+kiwisolver==1.5.0
+pillow==12.3.0
+pyparsing==3.3.2
+
+# ============================================================
+# Async / Runtime / Utilities
+# ============================================================
+attrs==26.1.0
+backoff==2.2.1
+click==8.4.2
+colorama==0.4.6
+diskcache==5.6.3
+distro==1.9.0
+durationpy==0.10
+filelock==3.32.2
+importlib_resources==7.1.0
+nest-asyncio==1.6.0
+packaging==26.3
+platformdirs==4.11.1
+portalocker==2.7.0
+six==1.17.0
+tenacity==9.1.4
+tzdata==2026.3
+uuid_utils==0.17.0
+appdirs==1.4.4
+
+# ============================================================
+# Security / Authentication
+# ============================================================
+bcrypt==5.0.0
+cryptography==50.0.0
+cffi==2.1.1
+pycparser==3.0
+PyJWT==2.13.0
+
+# ============================================================
+# CLI / Terminal / Formatting
+# ============================================================
+rich==14.3.4
+textual==8.2.8
+typer==0.27.1
+shellingham==1.5.4
+termcolor==3.3.0
+Pygments==2.20.0
+markdown-it-py==4.2.0
+mdurl==0.1.2
+linkify-it-py==2.1.0
+mdit-py-plugins==0.6.1
+uc-micro-py==2.0.0
+
+# ============================================================
+# Development / Testing / Formatting
+# ============================================================
+pytest==9.1.1
+pytest-cov==7.1.0
+coverage==7.15.4
+black==26.5.1
+ruff==0.16.2
+mypy==2.3.0
+mypy_extensions==1.1.0
+
+# ============================================================
+# Build / Packaging
+# ============================================================
+build==1.5.0
+setuptools==84.0.0
+uv==0.11.33
+pyproject_hooks==1.2.0
+tomli==2.0.2
+tomli_w==1.1.0
+pathspec==1.1.1
+pytokens==0.4.1
+
+# ============================================================
+# Windows
+# ============================================================
+pywin32==312
+
+# ============================================================
+# Miscellaneous
+# ============================================================
+ast_serialize==0.8.0
+deprecation==2.1.0
+fast-depends==3.0.8
+flatbuffers==25.12.19
+jiter==0.14.0
+librt==0.15.0
+narwhals==2.24.0
+orjson==3.11.9
+ormsgpack==1.12.2
+overrides==7.7.0
+PyPika==0.51.1
