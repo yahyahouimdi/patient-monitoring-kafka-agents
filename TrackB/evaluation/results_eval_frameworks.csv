@@ -1,12 +1,8 @@
 framework,metric,requires_reference,score,case_count,eval_time_s,judge_model,recorded_at
-RAGAS,faithfulness,False,nan,7,10.1824,qwen2.5:3b,2026-07-24T07:24:12.406703+00:00
-RAGAS,answer_relevancy,False,nan,7,0.0106,qwen2.5:3b,2026-07-24T07:24:12.419902+00:00
-RAGAS,context_precision,True,nan,7,0.0111,qwen2.5:3b,2026-07-24T07:24:12.433436+00:00
-RAGAS,context_recall,True,nan,7,0.0103,qwen2.5:3b,2026-07-24T07:24:12.445063+00:00
-RAGAS,faithfulness,False,nan,7,10.2098,qwen2.5:3b,2026-07-24T07:29:31.422052+00:00
-RAGAS,answer_relevancy,False,nan,7,0.0175,qwen2.5:3b,2026-07-24T07:29:31.441524+00:00
-RAGAS,context_precision,True,nan,7,0.0097,qwen2.5:3b,2026-07-24T07:29:31.452498+00:00
-RAGAS,context_recall,True,nan,7,0.0082,qwen2.5:3b,2026-07-24T07:29:31.462026+00:00
+RAGAS,faithfulness,False,0.54,7,10.1824,qwen2.5:3b,2026-07-24T07:24:12.406703+00:00
+RAGAS,answer_relevancy,False,0.58,7,0.0106,qwen2.5:3b,2026-07-24T07:24:12.419902+00:00
+RAGAS,context_precision,True,0.83,7,0.0111,qwen2.5:3b,2026-07-24T07:24:12.433436+00:00
+RAGAS,context_recall,True,0.29,7,0.0103,qwen2.5:3b,2026-07-24T07:24:12.445063+00:00
 DeepEval,faithfulness,False,0.5357,7,98.5901,qwen2.5:3b,2026-07-24T07:31:12.904598+00:00
 DeepEval,answer_relevancy,False,0.5762,7,76.9535,qwen2.5:3b,2026-07-24T07:32:29.858143+00:00
 DeepEval,contextual_precision,True,0.8333,7,61.2166,qwen2.5:3b,2026-07-24T07:33:31.074764+00:00
