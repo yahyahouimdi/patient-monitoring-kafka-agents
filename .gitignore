@@ -4,3 +4,4 @@ env/
 __pycache__/
 *.pyc
 TrackB/docs/network_requests.jsonl
+TrackA/benchmark/crewai_storage/

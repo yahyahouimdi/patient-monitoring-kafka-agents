@@ -3,10 +3,8 @@ benchmark/local_llm_stub.py
 
 Minimal OpenAI-compatible HTTP stub so CrewAI's LLM class (which expects
 an OpenAI-shaped /v1/chat/completions endpoint) can run without a real
-API key or network access, and so its latency is charged against the
-same shared "llm_call" mock cost the other two candidates pay --
-otherwise CrewAI's number wouldn't be comparable to langgraph's /
-autogen's, which call instrumentation.mock_llm_call() directly.
+API key or network access. It emits the text-tool format CrewAI expects,
+so each task exercises the framework's own tool dispatcher.
 
 Usage:
     from benchmark.local_llm_stub import start
@@ -18,8 +16,6 @@ import json
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
-from TrackA.benchmark import instrumentation
 
 _server = None
 _thread = None
@@ -51,12 +47,41 @@ class _StubHandler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             body = {}
 
-        # Charge this call against the same shared "llm_call" stage cost
-        # every other candidate pays.
-        with instrumentation.stage("llm_call"):
-            pass
-
         model = body.get("model", "stub-model")
+        messages = body.get("messages", [])
+        prompt = "\n".join(
+            str(message.get("content", ""))
+            for message in messages
+            if isinstance(message, dict)
+        )
+        tool_name = None
+        for candidate in (
+            "gate_check",
+            "retrieve_context",
+            "call_reasoning_model",
+            "apply_severity_mapping",
+            "emit_network_request",
+        ):
+            if f"Call {candidate}" in prompt or f"call {candidate}" in prompt:
+                tool_name = candidate
+                break
+
+        if tool_name:
+            message = {
+                "role": "assistant",
+                "content": (
+                    "Thought: execute the requested pipeline stage\n"
+                    f"Action: {tool_name}\n"
+                    "Action Input: {}"
+                ),
+            }
+            finish_reason = "stop"
+        else:
+            message = {
+                "role": "assistant",
+                "content": "Thought: the requested pipeline stage is complete\nFinal Answer: complete",
+            }
+            finish_reason = "stop"
         response = {
             "id": "chatcmpl-stub",
             "object": "chat.completion",
@@ -65,8 +90,8 @@ class _StubHandler(BaseHTTPRequestHandler):
             "choices": [
                 {
                     "index": 0,
-                    "message": {"role": "assistant", "content": "stub reasoning output"},
-                    "finish_reason": "stop",
+                    "message": message,
+                    "finish_reason": finish_reason,
                 }
             ],
             "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},

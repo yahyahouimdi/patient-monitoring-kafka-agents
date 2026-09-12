@@ -21,6 +21,7 @@ import statistics
 import sys
 import time
 import traceback
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from TrackA.benchmark import instrumentation
@@ -60,6 +61,16 @@ _crewai_stub_llm = None
 
 def _run_crewai(patient_id, merged_state):
     global _crewai_stub_started, _crewai_stub_llm
+    from pathlib import Path
+
+    # CrewAI persists task outputs in a platform user-data directory by
+    # default. Keep benchmark artifacts inside the repository so the run is
+    # reproducible in restricted environments and easy to clean up.
+    storage_path = Path(__file__).resolve().parent / "crewai_storage"
+    storage_path.mkdir(parents=True, exist_ok=True)
+    import crewai.memory.storage.kickoff_task_outputs_storage as kickoff_storage
+    kickoff_storage.db_storage_path = lambda: str(storage_path)
+
     from TrackA.benchmark.local_llm_stub import start as start_stub
     from crewai import LLM
     from TrackA.crewai_impl import crew as mod
@@ -80,6 +91,10 @@ def _run_crewai(patient_id, merged_state):
     # once, up front, makes that explicit instead of accidental.
     if _crewai_stub_llm is None:
         _crewai_stub_llm = LLM(model="openai/gpt-4o-mini", base_url="http://127.0.0.1:8877/v1", api_key="sk-stub")
+        # Force CrewAI's text-tool parser so the local stub can exercise the
+        # same Agent/Task dispatcher without fabricating provider-native
+        # tool-call message objects.
+        type(_crewai_stub_llm).supports_function_calling = lambda self: False
 
     # Patch once: wrap _make_agents so every Agent uses the local stub LLM
     # instead of requiring a real OpenAI key. Idempotent across calls.
@@ -96,6 +111,27 @@ def _run_crewai(patient_id, merged_state):
         mod._stub_patched = True
 
     return mod.run_pipeline(patient_id, merged_state)
+
+
+def _run_lightweight(patient_id, merged_state):
+    from TrackA.lightweight_impl.pipeline import run_pipeline
+    return run_pipeline(patient_id, merged_state)
+
+
+def _benchmark_retrieve(query=None, k=None, patient_id=None):
+    """Deterministic retrieval stand-in shared by every candidate."""
+    result = instrumentation.mock_retrieve(query=query, k=k or 3)
+    return result["snippets"]
+
+
+def _benchmark_reason(narrative, retrieved):
+    """Deterministic valid model result with the common mocked stage cost."""
+    instrumentation.mock_llm_call(prompt=narrative)
+    return {"severity": "moderate", "note": "benchmark reasoning result"}
+
+
+def _benchmark_emit(producer, request):
+    instrumentation.mock_emit(payload=request.__dict__)
 
 
 def _wait_for_stub_ready(host, port, timeout=10):
@@ -117,6 +153,7 @@ CANDIDATES = {
     "langgraph": _run_langgraph,
     "autogen": _run_autogen,
     "crewai": _run_crewai,
+    "lightweight": _run_lightweight,
 }
 
 
@@ -127,7 +164,13 @@ def run_one(name, fn, patient_id, merged_state, seed):
     result = None
     with instrumentation.instrumented(seed=seed):
         try:
-            result = fn(patient_id, merged_state)
+            # Compare orchestration only. Every candidate therefore sees the
+            # same deterministic retrieval, model, and emission costs.
+            from TrackA.shared import emission, reasoning_client, retrieval_client
+            with patch.object(retrieval_client, "search", _benchmark_retrieve), \
+                 patch.object(reasoning_client, "call_reasoning_model", _benchmark_reason), \
+                 patch.object(emission, "emit", _benchmark_emit):
+                result = fn(patient_id, merged_state)
         except Exception as e:  # noqa: BLE001 -- want every candidate's failure mode captured
             error = f"{type(e).__name__}: {e}"
             traceback.print_exc(file=sys.stderr)

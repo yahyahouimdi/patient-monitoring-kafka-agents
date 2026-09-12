@@ -5,42 +5,53 @@
       "n_ok": 6,
       "n_failed": 0,
       "first_error": null,
-      "mean_total_ms": 3475.4,
-      "median_total_ms": 457.8,
-      "mean_overhead_ms": 3475.4,
-      "median_overhead_ms": 457.8,
-      "stdev_overhead_ms": 5927.4
+      "mean_total_ms": 368.2,
+      "median_total_ms": 318.1,
+      "mean_overhead_ms": 132.0,
+      "median_overhead_ms": 1.9,
+      "stdev_overhead_ms": 319.4
     },
     "autogen": {
       "n_runs": 6,
       "n_ok": 6,
       "n_failed": 0,
       "first_error": null,
-      "mean_total_ms": 2043.6,
-      "median_total_ms": 936.7,
-      "mean_overhead_ms": 2043.6,
-      "median_overhead_ms": 936.7,
-      "stdev_overhead_ms": 2546.0
+      "mean_total_ms": 888.2,
+      "median_total_ms": 317.9,
+      "mean_overhead_ms": 652.0,
+      "median_overhead_ms": 1.3,
+      "stdev_overhead_ms": 1594.1
     },
     "crewai": {
       "n_runs": 6,
       "n_ok": 6,
       "n_failed": 0,
       "first_error": null,
-      "mean_total_ms": 20656.8,
-      "median_total_ms": 22648.9,
-      "mean_overhead_ms": 20656.8,
-      "median_overhead_ms": 22648.9,
-      "stdev_overhead_ms": 5054.4
+      "mean_total_ms": 22851.9,
+      "median_total_ms": 23402.7,
+      "mean_overhead_ms": 22615.7,
+      "median_overhead_ms": 23010.1,
+      "stdev_overhead_ms": 1897.9
+    },
+    "lightweight": {
+      "n_runs": 6,
+      "n_ok": 6,
+      "n_failed": 0,
+      "first_error": null,
+      "mean_total_ms": 237.3,
+      "median_total_ms": 1.8,
+      "mean_overhead_ms": 1.1,
+      "median_overhead_ms": 0.8,
+      "stdev_overhead_ms": 1.3
     }
   },
   "runs": {
     "langgraph": [
       {
         "patient_id": "P001_S1",
-        "total_seconds": 0.9147541000274941,
+        "total_seconds": 0.7839409000007436,
         "stage_seconds": 0,
-        "overhead_seconds": 0.9147541000274941,
+        "overhead_seconds": 0.7839409000007436,
         "stage_log": [],
         "result": null,
         "error": null,
@@ -48,9 +59,9 @@
       },
       {
         "patient_id": "P001_S2",
-        "total_seconds": 0.0007786999922245741,
+        "total_seconds": 0.0007400000176858157,
         "stage_seconds": 0,
-        "overhead_seconds": 0.0007786999922245741,
+        "overhead_seconds": 0.0007400000176858157,
         "stage_log": [],
         "result": null,
         "error": null,
@@ -58,9 +69,9 @@
       },
       {
         "patient_id": "P001_S3",
-        "total_seconds": 0.0006169999833218753,
+        "total_seconds": 0.0006206999823916703,
         "stage_seconds": 0,
-        "overhead_seconds": 0.0006169999833218753,
+        "overhead_seconds": 0.0006206999823916703,
         "stage_log": [],
         "result": null,
         "error": null,
@@ -68,45 +79,65 @@
       },
       {
         "patient_id": "P001_S4",
-        "total_seconds": 14.896831499994732,
-        "stage_seconds": 0,
-        "overhead_seconds": 14.896831499994732,
-        "stage_log": [],
+        "total_seconds": 0.6353667000075802,
+        "stage_seconds": 0.6322456521581732,
+        "overhead_seconds": 0.0031210478494070326,
+        "stage_log": [
+          [
+            "retrieve",
+            0.03308083513933794
+          ],
+          [
+            "llm_call",
+            0.5991648170188353
+          ]
+        ],
         "result": {
           "patient_id": "P001_S4",
-          "severity": "normal",
-          "connection_type": "none",
-          "reason": "Patient's vital signs within normal range.",
+          "severity": "moderate",
+          "connection_type": "shared_good_quality",
+          "reason": "benchmark reasoning result",
           "confidence": "confirmed",
-          "note": "Patient's vital signs within normal range.",
-          "timestamp": "2026-08-10T10:37:28.526228+00:00"
+          "note": "benchmark reasoning result",
+          "timestamp": "2026-09-12T21:25:12.790932+00:00",
+          "scenario_id": null
         },
         "error": null,
         "repeat": 0
       },
       {
         "patient_id": "P001_S5",
-        "total_seconds": 5.038469499966595,
-        "stage_seconds": 0,
-        "overhead_seconds": 5.038469499966595,
-        "stage_log": [],
+        "total_seconds": 0.7881098999932874,
+        "stage_seconds": 0.7850455573573187,
+        "overhead_seconds": 0.0030643426359686643,
+        "stage_log": [
+          [
+            "retrieve",
+            0.050741243772425906
+          ],
+          [
+            "llm_call",
+            0.7343043135848928
+          ]
+        ],
         "result": {
           "patient_id": "P001_S5",
-          "severity": "high",
-          "connection_type": "dedicated_relaxed",
-          "reason": "Patient unresponsive and not breathing normally (SpO2 94)",
+          "severity": "moderate",
+          "connection_type": "shared_good_quality",
+          "reason": "benchmark reasoning result",
           "confidence": "confirmed",
-          "note": "Patient unresponsive and not breathing normally (SpO2 94)",
-          "timestamp": "2026-08-10T10:37:33.564829+00:00"
+          "note": "benchmark reasoning result",
+          "timestamp": "2026-09-12T21:25:13.579207+00:00",
+          "scenario_id": null
         },
         "error": null,
         "repeat": 0
       },
       {
         "patient_id": "P001_S6",
-        "total_seconds": 0.0007319999858736992,
+        "total_seconds": 0.0006176999886520207,
         "stage_seconds": 0,
-        "overhead_seconds": 0.0007319999858736992,
+        "overhead_seconds": 0.0006176999886520207,
         "stage_log": [],
         "result": null,
         "error": null,
@@ -116,9 +147,9 @@
     "autogen": [
       {
         "patient_id": "P001_S1",
-        "total_seconds": 1.8734430999611504,
+        "total_seconds": 3.9059580999892205,
         "stage_seconds": 0,
-        "overhead_seconds": 1.8734430999611504,
+        "overhead_seconds": 3.9059580999892205,
         "stage_log": [],
         "result": null,
         "error": null,
@@ -126,9 +157,9 @@
       },
       {
         "patient_id": "P001_S2",
-        "total_seconds": 4.1899969801306725e-05,
+        "total_seconds": 9.549999958835542e-05,
         "stage_seconds": 0,
-        "overhead_seconds": 4.1899969801306725e-05,
+        "overhead_seconds": 9.549999958835542e-05,
         "stage_log": [],
         "result": null,
         "error": null,
@@ -136,9 +167,9 @@
       },
       {
         "patient_id": "P001_S3",
-        "total_seconds": 2.7099973522126675e-05,
+        "total_seconds": 6.240000948309898e-05,
         "stage_seconds": 0,
-        "overhead_seconds": 2.7099973522126675e-05,
+        "overhead_seconds": 6.240000948309898e-05,
         "stage_log": [],
         "result": null,
         "error": null,
@@ -146,45 +177,65 @@
       },
       {
         "patient_id": "P001_S4",
-        "total_seconds": 5.238575500028674,
-        "stage_seconds": 0,
-        "overhead_seconds": 5.238575500028674,
-        "stage_log": [],
+        "total_seconds": 0.6356366000254638,
+        "stage_seconds": 0.6322456521581732,
+        "overhead_seconds": 0.0033909478672906612,
+        "stage_log": [
+          [
+            "retrieve",
+            0.03308083513933794
+          ],
+          [
+            "llm_call",
+            0.5991648170188353
+          ]
+        ],
         "result": {
           "patient_id": "P001_S4",
-          "severity": "normal",
-          "connection_type": "none",
-          "reason": "Patient's vital signs within normal range.",
+          "severity": "moderate",
+          "connection_type": "shared_good_quality",
+          "reason": "benchmark reasoning result",
           "confidence": "confirmed",
-          "note": "Patient's vital signs within normal range.",
-          "timestamp": "2026-08-10T10:37:40.677992+00:00"
+          "note": "benchmark reasoning result",
+          "timestamp": "2026-09-12T21:25:18.121748+00:00",
+          "scenario_id": null
         },
         "error": null,
         "repeat": 0
       },
       {
         "patient_id": "P001_S5",
-        "total_seconds": 5.149330699990969,
-        "stage_seconds": 0,
-        "overhead_seconds": 5.149330699990969,
-        "stage_log": [],
+        "total_seconds": 0.7875898999918718,
+        "stage_seconds": 0.7850455573573187,
+        "overhead_seconds": 0.002544342634553054,
+        "stage_log": [
+          [
+            "retrieve",
+            0.050741243772425906
+          ],
+          [
+            "llm_call",
+            0.7343043135848928
+          ]
+        ],
         "result": {
           "patient_id": "P001_S5",
-          "severity": "high",
-          "connection_type": "dedicated_relaxed",
-          "reason": "Patient unresponsive and no response to stimuli.",
+          "severity": "moderate",
+          "connection_type": "shared_good_quality",
+          "reason": "benchmark reasoning result",
           "confidence": "confirmed",
-          "note": "Patient unresponsive and no response to stimuli.",
-          "timestamp": "2026-08-10T10:37:45.827408+00:00"
+          "note": "benchmark reasoning result",
+          "timestamp": "2026-09-12T21:25:18.909217+00:00",
+          "scenario_id": null
         },
         "error": null,
         "repeat": 0
       },
       {
         "patient_id": "P001_S6",
-        "total_seconds": 3.940000897273421e-05,
+        "total_seconds": 0.00011110000195913017,
         "stage_seconds": 0,
-        "overhead_seconds": 3.940000897273421e-05,
+        "overhead_seconds": 0.00011110000195913017,
         "stage_log": [],
         "result": null,
         "error": null,
@@ -194,9 +245,9 @@
     "crewai": [
       {
         "patient_id": "P001_S1",
-        "total_seconds": 10.351837199996226,
+        "total_seconds": 24.444748100009747,
         "stage_seconds": 0,
-        "overhead_seconds": 10.351837199996226,
+        "overhead_seconds": 24.444748100009747,
         "stage_log": [],
         "result": null,
         "error": null,
@@ -204,9 +255,9 @@
       },
       {
         "patient_id": "P001_S2",
-        "total_seconds": 22.90597380005056,
+        "total_seconds": 23.75940609999816,
         "stage_seconds": 0,
-        "overhead_seconds": 22.90597380005056,
+        "overhead_seconds": 23.75940609999816,
         "stage_log": [],
         "result": null,
         "error": null,
@@ -214,9 +265,9 @@
       },
       {
         "patient_id": "P001_S3",
-        "total_seconds": 22.42397369997343,
+        "total_seconds": 19.01852390001295,
         "stage_seconds": 0,
-        "overhead_seconds": 22.42397369997343,
+        "overhead_seconds": 19.01852390001295,
         "stage_log": [],
         "result": null,
         "error": null,
@@ -224,29 +275,163 @@
       },
       {
         "patient_id": "P001_S4",
-        "total_seconds": 22.97276640002383,
-        "stage_seconds": 0,
-        "overhead_seconds": 22.97276640002383,
-        "stage_log": [],
-        "result": null,
+        "total_seconds": 23.08340680002584,
+        "stage_seconds": 0.6322456521581732,
+        "overhead_seconds": 22.45116114786767,
+        "stage_log": [
+          [
+            "retrieve",
+            0.03308083513933794
+          ],
+          [
+            "llm_call",
+            0.5991648170188353
+          ]
+        ],
+        "result": {
+          "patient_id": "P001_S4",
+          "severity": "moderate",
+          "connection_type": "shared_good_quality",
+          "reason": "benchmark reasoning result",
+          "confidence": "confirmed",
+          "note": "benchmark reasoning result",
+          "timestamp": "2026-09-12T21:26:48.323036+00:00",
+          "scenario_id": null
+        },
         "error": null,
         "repeat": 0
       },
       {
         "patient_id": "P001_S5",
-        "total_seconds": 22.412658800021745,
+        "total_seconds": 23.595770999992965,
+        "stage_seconds": 0.7850455573573187,
+        "overhead_seconds": 22.810725442635647,
+        "stage_log": [
+          [
+            "retrieve",
+            0.050741243772425906
+          ],
+          [
+            "llm_call",
+            0.7343043135848928
+          ]
+        ],
+        "result": {
+          "patient_id": "P001_S5",
+          "severity": "moderate",
+          "connection_type": "shared_good_quality",
+          "reason": "benchmark reasoning result",
+          "confidence": "confirmed",
+          "note": "benchmark reasoning result",
+          "timestamp": "2026-09-12T21:27:11.999886+00:00",
+          "scenario_id": null
+        },
+        "error": null,
+        "repeat": 0
+      },
+      {
+        "patient_id": "P001_S6",
+        "total_seconds": 23.209555499983253,
         "stage_seconds": 0,
-        "overhead_seconds": 22.412658800021745,
+        "overhead_seconds": 23.209555499983253,
+        "stage_log": [],
+        "result": null,
+        "error": null,
+        "repeat": 0
+      }
+    ],
+    "lightweight": [
+      {
+        "patient_id": "P001_S1",
+        "total_seconds": 0.003481100022327155,
+        "stage_seconds": 0,
+        "overhead_seconds": 0.003481100022327155,
         "stage_log": [],
         "result": null,
         "error": null,
         "repeat": 0
       },
       {
-        "patient_id": "P001_S6",
-        "total_seconds": 22.873841999971773,
+        "patient_id": "P001_S2",
+        "total_seconds": 0.0001446999958716333,
         "stage_seconds": 0,
-        "overhead_seconds": 22.873841999971773,
+        "overhead_seconds": 0.0001446999958716333,
+        "stage_log": [],
+        "result": null,
+        "error": null,
+        "repeat": 0
+      },
+      {
+        "patient_id": "P001_S3",
+        "total_seconds": 5.789997521787882e-05,
+        "stage_seconds": 0,
+        "overhead_seconds": 5.789997521787882e-05,
+        "stage_log": [],
+        "result": null,
+        "error": null,
+        "repeat": 0
+      },
+      {
+        "patient_id": "P001_S4",
+        "total_seconds": 0.6337300000013784,
+        "stage_seconds": 0.6322456521581732,
+        "overhead_seconds": 0.0014843478432051693,
+        "stage_log": [
+          [
+            "retrieve",
+            0.03308083513933794
+          ],
+          [
+            "llm_call",
+            0.5991648170188353
+          ]
+        ],
+        "result": {
+          "patient_id": "P001_S4",
+          "severity": "moderate",
+          "connection_type": "shared_good_quality",
+          "reason": "benchmark reasoning result",
+          "confidence": "confirmed",
+          "note": "benchmark reasoning result",
+          "timestamp": "2026-09-12T21:27:36.660467+00:00",
+          "scenario_id": null
+        },
+        "error": null,
+        "repeat": 0
+      },
+      {
+        "patient_id": "P001_S5",
+        "total_seconds": 0.7864398999954574,
+        "stage_seconds": 0.7850455573573187,
+        "overhead_seconds": 0.001394342638138646,
+        "stage_log": [
+          [
+            "retrieve",
+            0.050741243772425906
+          ],
+          [
+            "llm_call",
+            0.7343043135848928
+          ]
+        ],
+        "result": {
+          "patient_id": "P001_S5",
+          "severity": "moderate",
+          "connection_type": "shared_good_quality",
+          "reason": "benchmark reasoning result",
+          "confidence": "confirmed",
+          "note": "benchmark reasoning result",
+          "timestamp": "2026-09-12T21:27:37.446943+00:00",
+          "scenario_id": null
+        },
+        "error": null,
+        "repeat": 0
+      },
+      {
+        "patient_id": "P001_S6",
+        "total_seconds": 0.00013770000077784061,
+        "stage_seconds": 0,
+        "overhead_seconds": 0.00013770000077784061,
         "stage_log": [],
         "result": null,
         "error": null,

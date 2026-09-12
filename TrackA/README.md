@@ -151,15 +151,16 @@ The framework comparison is intentionally fair because each candidate uses the s
 
 ## Benchmark result: what was measured
 
-The benchmark in `TrackA/benchmark/run_benchmark.py` compares three framework implementations using the same synthetic patient events and the same mocked stage costs.
+The benchmark in `TrackA/benchmark/run_benchmark.py` compares four orchestration candidates using the same synthetic patient events and identical mocked retrieval, reasoning, and emission costs. The fourth candidate is a deliberately small native-Python handoff baseline.
 
 The actual result file is `TrackA/benchmark/results.json` and the summary is:
 
 | Candidate | n_ok / n_runs | Median total ms | Median overhead ms | Notes |
 |---|---:|---:|---:|---|
-| LangGraph | 6 / 6 | 457.8 | 457.8 | Best latency, straightforward graph flow |
-| AutoGen | 6 / 6 | 936.7 | 936.7 | Acceptable but higher orchestration cost |
-| CrewAI | 6 / 6 | 22648.9 | 22648.9 | Substantially slower for this fixed pipeline |
+| LangGraph | 6 / 6 | 318.1 | 1.9 | Low overhead, straightforward graph flow |
+| AutoGen | 6 / 6 | 317.9 | 1.3 | Low median overhead with higher variance |
+| CrewAI | 6 / 6 | 23402.7 | 23010.1 | Substantially slower for this fixed pipeline |
+| Lightweight native pipeline | 6 / 6 | 1.8 | 0.8 | Dependency-free lower-bound baseline |
 
 This is the strongest evidence from the repository itself: on the same task, LangGraph has the lowest framework overhead by a wide margin.
 

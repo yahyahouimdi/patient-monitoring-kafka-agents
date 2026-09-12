@@ -41,6 +41,10 @@ import threading
 import time
 
 _state = threading.local()
+_global_lock = threading.Lock()
+_global_active = False
+_global_rng = None
+_global_log = []
 
 # Base costs, in seconds. Order of magnitude matches the Project
 # Architecture & Workflow Guide's description of a single locally-hosted
@@ -64,11 +68,20 @@ def reset():
     _state.log = []
     _state.rng = None
     _state.active = False
+    global _global_active, _global_rng, _global_log
+    with _global_lock:
+        _global_active = False
+        _global_rng = None
+        _global_log = []
 
 
 def _ensure_state():
     if not hasattr(_state, "log"):
-        reset()
+        # A framework worker thread needs its own local state without
+        # clearing the process-wide benchmark context owned by the caller.
+        _state.log = []
+        _state.rng = None
+        _state.active = False
 
 
 @contextlib.contextmanager
@@ -84,19 +97,27 @@ def instrumented(seed=0):
     """
     _ensure_state()
     prev_rng, prev_active = _state.rng, _state.active
+    global _global_active, _global_rng
+    with _global_lock:
+        _global_active = True
+        _global_rng = random.Random(seed)
     _state.rng = random.Random(seed)
     _state.active = True
     try:
         yield
     finally:
         _state.rng, _state.active = prev_rng, prev_active
+        with _global_lock:
+            _global_active = False
+            _global_rng = None
 
 
 def get_log():
     """Return the (stage_name, elapsed_seconds) tuples recorded since the
     last reset()."""
     _ensure_state()
-    return list(_state.log)
+    with _global_lock:
+        return list(_state.log) + list(_global_log)
 
 
 @contextlib.contextmanager
@@ -112,12 +133,19 @@ def stage(name, base_seconds=None, jitter_seconds=None):
     base = _STAGE_BASE_SECONDS.get(name, 0.05) if base_seconds is None else base_seconds
     jitter = _STAGE_JITTER_SECONDS.get(name, 0.01) if jitter_seconds is None else jitter_seconds
 
+    global _global_active, _global_rng
     if _state.active and _state.rng is not None:
         duration = max(0.0, base + _state.rng.uniform(-jitter, jitter))
+        target_log = _state.log
+    elif _global_active and _global_rng is not None:
+        with _global_lock:
+            duration = max(0.0, base + _global_rng.uniform(-jitter, jitter))
+        target_log = _global_log
     else:
         # Not inside an instrumented() block (e.g. called ad hoc from a
         # script) -- still usable, just unseeded and not logged.
         duration = max(0.0, base + random.uniform(-jitter, jitter))
+        target_log = None
 
     time.sleep(duration)
 
@@ -130,8 +158,11 @@ def stage(name, base_seconds=None, jitter_seconds=None):
     # still what total_seconds (t1 - t0) in run_benchmark.py measures,
     # so run-to-run scheduler jitter still shows up in overhead_seconds,
     # which is where it belongs.
-    if getattr(_state, "active", False):
+    if target_log is _state.log and getattr(_state, "active", False):
         _state.log.append((name, duration))
+    elif target_log is _global_log:
+        with _global_lock:
+            _global_log.append((name, duration))
 
     yield
 
