@@ -408,10 +408,10 @@ The project produces the following metrics:
 
 ## Quick start
 
-### Start Kafka
+### Start Kafka and Qdrant
 
 ```powershell
-docker compose up -d
+docker compose up -d kafka qdrant
 ```
 
 ### Create Kafka topics

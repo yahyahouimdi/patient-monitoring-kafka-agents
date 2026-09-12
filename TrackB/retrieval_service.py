@@ -67,6 +67,7 @@ QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 COLLECTION_NAME = "trackb_patient_kb"
 DEFAULT_K = 5
+REBUILD_ON_STARTUP = os.getenv("QDRANT_REBUILD_ON_STARTUP", "0").lower() in {"1", "true", "yes"}
 
 app = FastAPI(title="TrackB Retrieval Service (Qdrant)", version="0.3.0")
 
@@ -114,8 +115,20 @@ def build_index() -> None:
 
     client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
 
-    # recreate_collection() is deprecated/removed in recent qdrant-client
-    # versions -- do it explicitly instead for forward compatibility.
+    # Keep an existing collection across service restarts. Set
+    # QDRANT_REBUILD_ON_STARTUP=1 when the source corpus or embedding model
+    # changes and a full rebuild is intentional.
+    if client.collection_exists(COLLECTION_NAME) and not REBUILD_ON_STARTUP:
+        info = client.get_collection(COLLECTION_NAME)
+        if info.points_count >= len(documents):
+            _state["client"] = client
+            _state["model"] = model
+            print(
+                f"[retrieval_service] Reusing {info.points_count} persisted documents "
+                f"from Qdrant collection '{COLLECTION_NAME}'."
+            )
+            return
+
     if client.collection_exists(COLLECTION_NAME):
         client.delete_collection(COLLECTION_NAME)
     client.create_collection(

@@ -235,11 +235,13 @@ Those are normal production concerns, not a sign that Qdrant is a poor fit.
 
 ## Quick start
 
-Start a local Qdrant instance:
+Start the shared local stack (Kafka and Qdrant):
 
 ```bash
-docker run -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant
+docker compose up -d kafka qdrant
 ```
+
+The retrieval service reuses a persisted collection on restart. Set `QDRANT_REBUILD_ON_STARTUP=1` only when the source corpus or embedding model has changed.
 
 Start the service:
 
