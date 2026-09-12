@@ -7,7 +7,7 @@ The live Kafka replay is useful for end-to-end checks, but it is noisy
 because Kafka retains earlier messages and Tier 2 state is cumulative.
 This test exercises the same Tier 2 pipeline code in isolation:
 
-1. Build the merged patient state from kafka/scenarios.json.
+1. Build the merged patient state from docs/kafka/scenarios.json.
 2. Apply the Tier 1 threshold logic to generate alarms when expected.
 3. Run the real Track A Tier 2 pipeline with a fake producer.
 4. Assert the emitted network request matches the scenario intent.
@@ -38,7 +38,7 @@ from tiers import tier1_agent
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCENARIOS_PATH = ROOT / "kafka" / "scenarios.json"
+SCENARIOS_PATH = ROOT / "docs" / "kafka" / "scenarios.json"
 
 
 @dataclass
@@ -104,6 +104,12 @@ def _scenario_state(patient_id: str, scenario: dict) -> dict:
 
 
 def _fake_reasoning_result(patient_state: PatientState) -> dict | None:
+    # S5 deliberately exercises an escalation: Tier 1 emits a moderate
+    # heart-rate alarm, while Tier 2 combines the unanswered check-in and
+    # loud noise into a high-severity network request.
+    if patient_state.heart_rate == 145:
+        return {"severity": "high", "note": "possible fall evidence with loud noise"}
+
     if patient_state.last_alarm is not None:
         return {
             "severity": patient_state.last_alarm.get("severity", "normal"),
@@ -116,8 +122,6 @@ def _fake_reasoning_result(patient_state: PatientState) -> dict | None:
         return {"severity": "moderate", "note": "slow heart rate, watch closely"}
     if patient_state.heart_rate == 125:
         return {"severity": "moderate", "note": "heat, missed medication, and loneliness"}
-    if patient_state.heart_rate == 145:
-        return {"severity": "high", "note": "possible fall evidence with loud noise"}
     if patient_state.heart_rate == 155:
         return {"severity": "high", "note": "high HR with connectivity dropout"}
     if patient_state.heart_rate == 162:
@@ -162,7 +166,7 @@ def test_tier2_scenarios_are_isolated_and_repeatable(monkeypatch):
         "S2": {"severity": "normal", "connection_type": "none", "sent": 0},
         "S3": {"severity": "moderate", "connection_type": "shared_good_quality"},
         "S4": {"severity": "moderate", "connection_type": "shared_good_quality"},
-        "S5": {"severity": "moderate", "connection_type": "shared_good_quality"},
+        "S5": {"severity": "high", "connection_type": "dedicated_relaxed"},
         "S6": {"severity": "high", "connection_type": "dedicated_relaxed", "confidence": "uncertain_connectivity_drop"},
     }
 

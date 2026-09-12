@@ -6,7 +6,7 @@ This project is designed as both an implementation and a research artifact. It i
 
 ## Repository map
 
-- [kafka/](kafka/) — Kafka topic creation, fixture replay, and sensor simulation
+- [docs/kafka/](docs/kafka/) — Kafka topic creation, fixture replay, and sensor simulation
 - [tiers/](tiers/) — Tier 1 deterministic safety logic
 - [TrackA/](TrackA/) — Tier 2 reasoning layer and framework comparison
 - [TrackB/](TrackB/) — retrieval service, benchmark scripts, evaluation, and measured results
@@ -199,7 +199,7 @@ The same fixed set of scenarios is used across the system so the behavior can be
 | S5 | Heart-rate spike, an unanswered check-in, and a loud noise picked up by a smart speaker — but the fall sensor itself did not trigger | Should still be treated as a likely fall, by combining evidence the fall sensor alone would have missed |
 | S6 | An alarm-level reading arrives at the same moment the wearable's connection briefly drops | The alarm still goes out immediately and unmodified — but the system can attach a note asking for a quick confirmation, since the drop makes the reading slightly less certain |
 
-These scenarios are encoded in [kafka/scenarios.json](kafka/scenarios.json) and used in the benchmark and system validation flow.
+These scenarios are encoded in [docs/kafka/scenarios.json](docs/kafka/scenarios.json) and used in the benchmark and system validation flow.
 
 The first three scenarios verify the basic pipeline. The last three exist to show why a reasoning tier is useful: each one contains a pattern that a fixed threshold table either misses or handles too bluntly.
 
@@ -417,13 +417,7 @@ docker compose up -d
 ### Create Kafka topics
 
 ```powershell
-python kafka\Create_topics.py
-```
-
-### Replay scenarios
-
-```powershell
-python kafka\Fixtures.py
+python docs\kafka\Create_topics.py
 ```
 
 ### Run Tier 1
@@ -441,7 +435,13 @@ python -m TrackA.tier2_agent
 ### Start retrieval service
 
 ```powershell
-python TrackB\retrieval_service.py
+python -m uvicorn TrackB.retrieval_service:app --host 127.0.0.1 --port 8000
+```
+
+### Replay scenarios
+
+```powershell
+python docs\kafka\Fixtures.py --patient P001 --scenario S1
 ```
 
 ### Run smoke checks

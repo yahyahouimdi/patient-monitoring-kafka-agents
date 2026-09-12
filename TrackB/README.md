@@ -244,7 +244,7 @@ docker run -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qd
 Start the service:
 
 ```bash
-python TrackB/retrieval_service.py
+python -m uvicorn TrackB.retrieval_service:app --host 127.0.0.1 --port 8000
 ```
 
 Run the smoke test:

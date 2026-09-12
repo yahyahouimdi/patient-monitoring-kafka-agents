@@ -52,8 +52,14 @@ from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
-from loader import load_documents
-from retrieval.benchmark_common import load_embedding_model, encode_texts
+try:
+    # Package import used by `uvicorn TrackB.retrieval_service:app`.
+    from .loader import load_documents
+    from .retrieval.benchmark_common import load_embedding_model, encode_texts
+except ImportError:
+    # Direct import used by older commands launched from inside TrackB.
+    from loader import load_documents
+    from retrieval.benchmark_common import load_embedding_model, encode_texts
 
 # --- Config -------------------------------------------------------------
 

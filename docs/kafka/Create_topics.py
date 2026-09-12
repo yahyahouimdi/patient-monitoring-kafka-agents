@@ -22,6 +22,7 @@ TOPICS = {
     "device-connectivity": (1, 1, {"retention.ms": "604800000"}),        # status stream, 7d retention
     "patient-profile":     (1, 1, {"cleanup.policy": "compact"}),        # reference data, keyed by patient_id
     "alarms":              (1, 1, {"retention.ms": "2592000000"}),       # Tier 1 output, Tier 2 input -- 30d
+    "network-requests":    (1, 1, {"retention.ms": "2592000000"}),       # Tier 2 output -- 30d
 }
 
 

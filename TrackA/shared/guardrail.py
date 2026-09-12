@@ -14,18 +14,25 @@ from . import rules
 def apply_guardrail(state: PatientState, llm_result: dict) -> ReasoningResult:
     rule_severity, rule_reason = rules.rule_table_severity(state)
 
-    # S6: Tier 1 already fired. Check this FIRST, before the LLM-failure
-    # fallback below -- otherwise a timed-out/failed reasoning call on a
-    # since-normalized reading would report a weaker severity than Tier 1
-    # already committed to, silently softening an alarm Tier 2 must never
-    # touch (Guide S5, Proposal A S6.3 / S10).
+    # Tier 1 already fired. Check this FIRST, before the LLM-failure fallback
+    # below -- otherwise a timed-out/failed reasoning call on a since-
+    # normalized reading could report a weaker severity than Tier 1 already
+    # committed to. The alarm event itself is never changed; the emitted
+    # network request may still escalate when Tier 2 has stronger evidence
+    # (S5), while S6 keeps its original severity and adds a confidence note.
     if state.last_alarm is not None:
+        alarm_severity = state.last_alarm.get("severity", rule_severity)
         note = (
             llm_result.get("note", "") if llm_result is not None
             else "reasoning unavailable -- Tier-1 alarm preserved unmodified"
         )
+        final_severity = alarm_severity
+        if llm_result is not None:
+            llm_severity = llm_result.get("severity", alarm_severity)
+            if rules.severity_rank(llm_severity) > rules.severity_rank(alarm_severity):
+                final_severity = llm_severity
         return ReasoningResult(
-            severity=state.last_alarm.get("severity", rule_severity),
+            severity=final_severity,
             confidence=_confidence(state),
             note=note,
         )
