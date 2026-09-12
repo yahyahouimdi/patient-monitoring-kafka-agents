@@ -1,0 +1,6 @@
+scenario_id,expected_divergence,baseline_severity,baseline_connection_type,reasoning_severity,reasoning_connection_type,reasoning_confidence,reasoning_note
+S1,Both paths should remain critical because fall and low SpO2 cross deterministic safety thresholds.,critical,dedicated_low_latency,critical,dedicated_low_latency,confirmed,fall and hypoxemia
+S2,Both paths should remain normal and produce no network request.,normal,none,normal,none,confirmed,gate declined
+S4,"Reasoning should escalate normal to moderate by combining heat, missed medication, and being alone.",normal,none,moderate,shared_good_quality,confirmed,"heat, missed medication, and loneliness"
+S5,Reasoning should escalate the moderate heart-rate alarm to high using loud noise and unanswered check-in evidence.,moderate,shared_good_quality,high,dedicated_relaxed,confirmed,possible fall evidence with loud noise
+S6,Both paths should keep the high alarm; reasoning should retain the uncertain-connectivity confidence note.,high,dedicated_relaxed,high,dedicated_relaxed,uncertain_connectivity_drop,high HR with connectivity dropout
