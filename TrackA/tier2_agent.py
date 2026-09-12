@@ -87,7 +87,7 @@ producer = KafkaProducer(
 def main():
     consumer = KafkaConsumer(
         "wearable-vitals", "smarthome-context", "device-connectivity",
-        "patient-profile", "alarms",
+        "patient-profile", "patient-context", "alarms",
         bootstrap_servers=BOOTSTRAP_SERVERS,
         group_id="tier2-reasoning-agent",
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
