@@ -18,6 +18,9 @@ Detailed sub-readmes:
 
 - [TrackA/README.md](TrackA/README.md)
 - [TrackB/README.md](TrackB/README.md)
+- [Implementation status and DOCX requirement map](docs/implementation_status.md)
+- [Track A final report](TrackA/FINAL_REPORT.md)
+- [Track B final report](TrackB/FINAL_REPORT.md)
 
 ---
 
@@ -129,7 +132,9 @@ The system listens on topics including:
 - smarthome-context
 - device-connectivity
 - patient-profile
+- patient-context
 - alarms
+- network-requests
 
 The message broker is started from [docker-compose.yml](docker-compose.yml).
 
@@ -229,23 +234,25 @@ The project intentionally stops at producing a well-formed support request inste
 
 ## Track A: reasoning architecture and framework decision
 
-The main architectural comparison happens in [TrackA/README.md](TrackA/README.md).
+The main architectural comparison happens in [TrackA/README.md](TrackA/README.md) and the concise handoff is in [TrackA/FINAL_REPORT.md](TrackA/FINAL_REPORT.md).
 
 ### Reasoning framework comparison
 
-The Track A evaluation compares three orchestration frameworks:
+The Track A evaluation compares three orchestration frameworks plus a dependency-free native baseline:
 
 - LangGraph
 - AutoGen
 - CrewAI
+- lightweight native pipeline
 
 The benchmark results show:
 
 | Candidate | Median total ms | Median overhead ms |
 | --- | ---: | ---: |
-| LangGraph | 457.8 | 457.8 |
-| AutoGen | 936.7 | 936.7 |
-| CrewAI | 22648.9 | 22648.9 |
+| LangGraph | 318.1 | 1.9 |
+| AutoGen | 317.9 | 1.3 |
+| CrewAI | 23402.7 | 23010.1 |
+| Lightweight native | 1.8 | 0.8 |
 
 These values come from [TrackA/benchmark/results.json](TrackA/benchmark/results.json).
 

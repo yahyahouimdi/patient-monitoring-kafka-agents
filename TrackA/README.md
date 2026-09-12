@@ -13,7 +13,9 @@ The architecture intentionally separates:
 
 This is the critical design decision for fairness: every candidate executes the same retrieval, reasoning, rule-table guardrail, and emission flow, while only the orchestration framework changes.
 
-The benchmark results strongly favored LangGraph for this project profile.
+The benchmark results support LangGraph as the best production fit for this project profile: it has low overhead and an explicit state graph, while the native pipeline provides a useful lower-bound reference.
+
+For the final requirement map and residual work, see [FINAL_REPORT.md](FINAL_REPORT.md) and [../docs/implementation_status.md](../docs/implementation_status.md).
 
 ## Why this project is structured this way
 
@@ -162,7 +164,7 @@ The actual result file is `TrackA/benchmark/results.json` and the summary is:
 | CrewAI | 6 / 6 | 23402.7 | 23010.1 | Substantially slower for this fixed pipeline |
 | Lightweight native pipeline | 6 / 6 | 1.8 | 0.8 | Dependency-free lower-bound baseline |
 
-This is the strongest evidence from the repository itself: on the same task, LangGraph has the lowest framework overhead by a wide margin.
+The benchmark shows that LangGraph and AutoGen have similarly low overhead for the measured path, while CrewAI adds substantial dispatch cost. LangGraph remains the recommendation because its explicit state graph and conditional edges match this workflow directly.
 
 ## Why LangGraph is the best choice for this project
 
@@ -232,9 +234,10 @@ This is the clearest technical advantage.
 
 From the benchmark summary:
 
-- LangGraph median overhead: 457.8 ms
-- AutoGen median overhead: 936.7 ms
-- CrewAI median overhead: 22648.9 ms
+- LangGraph median overhead: 1.9 ms
+- AutoGen median overhead: 1.3 ms
+- CrewAI median overhead: 23010.1 ms
+- Lightweight native median overhead: 0.8 ms
 
 The gap is large enough that it is not a minor difference. For a near-real-time monitoring system, even a few hundred milliseconds matter. CrewAI's overhead makes it a poor fit for this fixed, low-latency, rules-first pipeline.
 

@@ -13,6 +13,8 @@ Track B evaluates the retrieval layer that feeds the Tier 2 reasoning system wit
 
 The benchmark and service implementation show that Qdrant is the best production choice for this project, even though FAISS is the fastest in pure local benchmark speed.
 
+For the final requirement map and residual work, see [FINAL_REPORT.md](FINAL_REPORT.md) and [../docs/implementation_status.md](../docs/implementation_status.md).
+
 ## What this Track does
 
 Track B contains the retrieval infrastructure used by the medical monitoring system:
