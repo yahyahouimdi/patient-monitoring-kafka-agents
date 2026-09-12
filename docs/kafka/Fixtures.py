@@ -103,6 +103,7 @@ def send_scenario(patient_id, scenario_id, producer=None, verbose=True):
 
         payload = copy.deepcopy(event["payload"])
         payload["patient_id"] = patient_id
+        payload["scenario_id"] = scenario_id
         payload["timestamp"] = now()
         if event["topic"] in ("wearable-vitals", "device-connectivity"):
             payload["device_id"] = device_id

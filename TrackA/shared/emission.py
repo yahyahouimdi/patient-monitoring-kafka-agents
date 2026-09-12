@@ -7,7 +7,10 @@ never an action. Publishes to the "network-requests" Kafka topic, the
 same way tier1_agent.py publishes to "alarms".
 """
 from datetime import datetime, timezone
+import json
+from pathlib import Path
 from .schemas import PatientState, ReasoningResult, NetworkRequest
+from .config import settings
 
 SEVERITY_TO_CONNECTION = {
     "critical": "dedicated_low_latency",
@@ -30,6 +33,7 @@ def build_network_request(state: PatientState, result: ReasoningResult, reason: 
         confidence=result.confidence,
         note=result.note,
         timestamp=now(),
+        scenario_id=state.scenario_id,
     )
 
 
@@ -49,10 +53,20 @@ def emit(producer, request: NetworkRequest) -> None:
             "confidence": request.confidence,
             "note": request.note,
             "timestamp": request.timestamp,
+            "scenario_id": request.scenario_id,
         },
     )
+    _append_request_log(request)
     print(
         f"[NETWORK-REQUEST] {request.patient_id} - {request.severity.upper()} - "
         f"{request.connection_type} - {request.reason}",
         flush=True,
     )
+
+
+def _append_request_log(request: NetworkRequest) -> None:
+    """Persist an inspectable copy for the read-only Track B service."""
+    path = Path(settings.NETWORK_REQUEST_LOG_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(request.__dict__, ensure_ascii=False) + "\n")

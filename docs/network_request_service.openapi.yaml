@@ -1,0 +1,58 @@
+openapi: 3.1.0
+info:
+  title: Track B Network Request Service
+  version: 1.0.0
+  description: Read-only access to Tier 2 network-request artifacts.
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        '200':
+          description: Service status and stored request count.
+  /requests/latest:
+    get:
+      operationId: latestRequest
+      responses:
+        '200':
+          description: Most recently emitted request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkRequestArtifact'
+        '404':
+          description: No request has been recorded.
+  /requests/{scenario}:
+    get:
+      operationId: scenarioRequests
+      parameters:
+        - name: scenario
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Requests emitted for the scenario.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NetworkRequestArtifact'
+        '404':
+          description: No request exists for the scenario.
+components:
+  schemas:
+    NetworkRequestArtifact:
+      type: object
+      required: [patient_id, severity, connection_type, reason, timestamp]
+      properties:
+        patient_id: {type: string}
+        severity: {type: string, enum: [normal, moderate, high, critical]}
+        connection_type: {type: string}
+        reason: {type: string}
+        confidence: {type: string}
+        note: {type: string}
+        timestamp: {type: string, format: date-time}
+        scenario_id: {type: [string, 'null']}
