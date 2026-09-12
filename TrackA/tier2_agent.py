@@ -25,7 +25,7 @@ from TrackA.langgraph_impl.graph import run_pipeline
 
 BOOTSTRAP_SERVERS = settings.BOOTSTRAP_SERVERS
 
-# patient_id -> merged latest known state across all topics
+# patient_id -> merged latest known state plus a bounded event history
 patient_state = {}
 
 
@@ -39,6 +39,14 @@ def update_state(topic, event):
         return None
 
     state = patient_state.setdefault(pid, {})
+    event_log = state.setdefault("event_log", [])
+    event_log.append({
+        "timestamp": event.get("timestamp", now()),
+        "source": topic,
+        "type": event.get("event_type", topic),
+        "value": dict(event),
+    })
+    del event_log[:-200]
 
     if topic == "device-connectivity":
         state.setdefault("connectivity", {})[event["device_id"]] = bool(event.get("connected"))

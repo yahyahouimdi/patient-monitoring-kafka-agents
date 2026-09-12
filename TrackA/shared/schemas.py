@@ -7,6 +7,7 @@ Phase 1. Only the pipeline wiring changes between frameworks -- these
 shapes, and every function in shared/, do not.
 """
 from dataclasses import dataclass, field
+import json
 from typing import Optional, Literal
 
 Severity = Literal["normal", "moderate", "high", "critical"]
@@ -35,6 +36,8 @@ class PatientState:
     medecin_responsable: Optional[str] = None
 
     last_alarm: Optional[dict] = None  # most recent Tier-1 alarm, if any
+    event_log: list[dict] = field(default_factory=list)
+    scenario_id: Optional[str] = None
     raw: dict = field(default_factory=dict)  # full merged dict, for logging
 
     @staticmethod
@@ -49,6 +52,19 @@ class PatientState:
         connectivity = state.get("connectivity", {}) or {}
         device_id = wearable.get("device_id")
         connected = connectivity.get(device_id, True) if device_id else True
+        event_log = state.get("event_log", []) or []
+
+        scenario_id = None
+        for entry in reversed(event_log):
+            value = entry.get("value", {}) if isinstance(entry, dict) else {}
+            if value.get("scenario_id"):
+                scenario_id = value["scenario_id"]
+                break
+        if scenario_id is None:
+            for event in (wearable, smarthome, profile):
+                if event.get("scenario_id"):
+                    scenario_id = event["scenario_id"]
+                    break
 
         return PatientState(
             patient_id=patient_id,
@@ -67,8 +83,32 @@ class PatientState:
             maladie=profile.get("maladie"),
             medecin_responsable=profile.get("medecin_responsable"),
             last_alarm=alarms[-1] if alarms else None,
+            event_log=event_log,
+            scenario_id=scenario_id,
             raw=state,
         )
+
+
+def event_log_narrative(state: PatientState, limit: int = 12) -> str:
+    """Render recent structured events into a compact model-readable log."""
+    rows = []
+    for entry in state.event_log[-limit:]:
+        if not isinstance(entry, dict):
+            continue
+        value = entry.get("value", {})
+        if isinstance(value, dict):
+            value = {
+                key: item
+                for key, item in value.items()
+                if key not in {"patient_id", "device_id", "timestamp"}
+            }
+        rows.append(
+            f"{entry.get('timestamp', 'unknown')} "
+            f"source={entry.get('source', 'unknown')} "
+            f"type={entry.get('type', 'event')} "
+            f"value={json.dumps(value, sort_keys=True, default=str)}"
+        )
+    return "\n".join(rows) if rows else "(no structured event history)"
 
 
 @dataclass
@@ -87,3 +127,4 @@ class NetworkRequest:
     confidence: Literal["confirmed", "uncertain_connectivity_drop"] = "confirmed"
     note: str = ""
     timestamp: str = ""
+    scenario_id: Optional[str] = None

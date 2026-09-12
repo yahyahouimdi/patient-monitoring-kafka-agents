@@ -26,7 +26,7 @@ from crewai import Agent, Crew, Process, Task
 from crewai.tools import tool
 
 from TrackA.shared import emission, gate, guardrail, reasoning_client, retrieval_client
-from TrackA.shared.schemas import NetworkRequest, PatientState
+from TrackA.shared.schemas import NetworkRequest, PatientState, event_log_narrative
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +57,7 @@ def retrieve_context_tool() -> str:
         return "skipped -- gate declined"
     ps = _ctx["patient_state"]
     query = f"patient {ps.patient_id} history {ps.maladie or ''}"
-    _ctx["retrieved"] = retrieval_client.search(query)
+    _ctx["retrieved"] = retrieval_client.search(query, patient_id=ps.patient_id)
     return f"retrieved {len(_ctx['retrieved'])} snippet(s)"
 
 
@@ -71,7 +71,8 @@ def call_reasoning_model_tool() -> str:
         f"HR={ps.heart_rate}, SpO2={ps.spo2}, Temp={ps.body_temperature}C, "
         f"Fall={ps.fall_detection}, Alone={ps.alone}, DoseTaken={ps.dose_taken}, "
         f"RoomTemp={ps.room_temperature}, SpeakerDCB={ps.smart_speaker_max_dcb}, "
-        f"CheckIn={ps.checkin_response}, LastAlarm={ps.last_alarm}"
+        f"CheckIn={ps.checkin_response}, LastAlarm={ps.last_alarm}\n"
+        f"Recent event log:\n{event_log_narrative(ps)}"
     )
     _ctx["llm_result"] = reasoning_client.call_reasoning_model(narrative, _ctx["retrieved"])
     return "reasoning complete"

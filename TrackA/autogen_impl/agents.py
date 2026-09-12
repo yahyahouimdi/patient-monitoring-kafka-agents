@@ -25,7 +25,7 @@ from typing import Optional
 import autogen  # pip install pyautogen --break-system-packages
 
 from TrackA.shared import emission, gate, guardrail, reasoning_client, retrieval_client
-from TrackA.shared.schemas import NetworkRequest, PatientState
+from TrackA.shared.schemas import NetworkRequest, PatientState, event_log_narrative
 
 _ctx: dict = {}  # per-invocation scratch space, reset in run_pipeline()
 
@@ -39,7 +39,7 @@ _ctx: dict = {}  # per-invocation scratch space, reset in run_pipeline()
 
 def _retrieve_context(query: str) -> str:
     """Fetch relevant patient-profile snippets from the retrieval service."""
-    _ctx["retrieved"] = retrieval_client.search(query)
+    _ctx["retrieved"] = retrieval_client.search(query, patient_id=_ctx["patient_state"].patient_id)
     return f"retrieved {len(_ctx['retrieved'])} snippet(s)"
 
 
@@ -124,7 +124,8 @@ def run_pipeline(patient_id: str, merged_state: dict, producer=None) -> Optional
         f"HR={ps.heart_rate}, SpO2={ps.spo2}, Temp={ps.body_temperature}C, "
         f"Fall={ps.fall_detection}, Alone={ps.alone}, DoseTaken={ps.dose_taken}, "
         f"RoomTemp={ps.room_temperature}, SpeakerDCB={ps.smart_speaker_max_dcb}, "
-        f"CheckIn={ps.checkin_response}, LastAlarm={ps.last_alarm}"
+        f"CheckIn={ps.checkin_response}, LastAlarm={ps.last_alarm}\n"
+        f"Recent event log:\n{event_log_narrative(ps)}"
     )
     _call(executor, "call_reasoning_model", narrative=narrative)
     _call(executor, "apply_severity_mapping")

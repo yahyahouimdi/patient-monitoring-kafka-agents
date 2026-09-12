@@ -12,7 +12,7 @@ from typing import TypedDict, Optional
 from TrackA.shared import emission, gate, guardrail, reasoning_client
 from langgraph.graph import StateGraph, END
 
-from TrackA.shared.schemas import PatientState, ReasoningResult, NetworkRequest
+from TrackA.shared.schemas import PatientState, ReasoningResult, NetworkRequest, event_log_narrative
 from TrackA.shared import retrieval_client
 
 
@@ -37,7 +37,7 @@ def route_after_gate(state: GraphState) -> str:
 def retrieval_node(state: GraphState) -> GraphState:
     ps = state["patient_state"]
     query = f"patient {ps.patient_id} history {ps.maladie or ''}"
-    state["retrieved"] = retrieval_client.search(query)
+    state["retrieved"] = retrieval_client.search(query, patient_id=ps.patient_id)
     return state
 
 
@@ -47,7 +47,8 @@ def reasoning_node(state: GraphState) -> GraphState:
         f"HR={ps.heart_rate}, SpO2={ps.spo2}, Temp={ps.body_temperature}C, "
         f"Fall={ps.fall_detection}, Alone={ps.alone}, DoseTaken={ps.dose_taken}, "
         f"RoomTemp={ps.room_temperature}, SpeakerDCB={ps.smart_speaker_max_dcb}, "
-        f"CheckIn={ps.checkin_response}, LastAlarm={ps.last_alarm}"
+        f"CheckIn={ps.checkin_response}, LastAlarm={ps.last_alarm}\n"
+        f"Recent event log:\n{event_log_narrative(ps)}"
     )
     state["llm_result"] = reasoning_client.call_reasoning_model(narrative, state["retrieved"])
     return state
