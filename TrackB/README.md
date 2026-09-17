@@ -67,15 +67,15 @@ These are the actual benchmark values captured in [docs/results.csv](docs/result
 
 | Store | Documents | Index time (s) | Avg latency (ms) | Query count |
 | --- | ---: | ---: | ---: | ---: |
-| Chroma | 6 | 0.120899 | 1.920 | 3 |
-| Chroma | 100 | 0.154131 | 2.439 | 3 |
-| Chroma | 1000 | 0.413993 | 1.978 | 3 |
-| FAISS | 6 | 0.000084 | 0.069 | 3 |
-| FAISS | 100 | 0.000133 | 0.066 | 3 |
-| FAISS | 1000 | 0.000578 | 0.203 | 3 |
-| Qdrant | 6 | 0.012289 | 0.828 | 3 |
-| Qdrant | 100 | 0.036456 | 1.148 | 3 |
-| Qdrant | 1000 | 0.263583 | 3.485 | 3 |
+| Chroma | 6 | 0.302457 | 0.942 | 210 |
+| Chroma | 100 | 0.289389 | 1.043 | 210 |
+| Chroma | 1000 | 0.364737 | 1.186 | 210 |
+| FAISS | 6 | 0.000630 | 0.035 | 210 |
+| FAISS | 100 | 0.000120 | 0.055 | 210 |
+| FAISS | 1000 | 0.000588 | 0.188 | 210 |
+| Qdrant | 6 | 0.008445 | 0.646 | 210 |
+| Qdrant | 100 | 0.032980 | 0.757 | 210 |
+| Qdrant | 1000 | 0.278777 | 2.729 | 210 |
 
 ### Interpretation
 

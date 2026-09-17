@@ -8,17 +8,17 @@ Track B supplies patient-scoped retrieval to Tier 2 and compares storage, evalua
 
 The measured values in `docs/results.csv` use the same embedding model and query set across Chroma, FAISS, and Qdrant.
 
-| Store | Corpus | Index time (s) | Average latency (ms) |
+| Store | Corpus | Index time (s) | Average latency (ms) | P95 latency (ms) | Samples |
 | --- | ---: | ---: | ---: |
-| Chroma | 6 | 0.120899 | 1.920 |
-| FAISS | 6 | 0.000084 | 0.069 |
-| Qdrant | 6 | 0.012289 | 0.828 |
-| Chroma | 100 | 0.154131 | 2.439 |
-| FAISS | 100 | 0.000133 | 0.066 |
-| Qdrant | 100 | 0.036456 | 1.148 |
-| Chroma | 1000 | 0.413993 | 1.978 |
-| FAISS | 1000 | 0.000578 | 0.203 |
-| Qdrant | 1000 | 0.263583 | 3.485 |
+| Chroma | 6 | 0.302457 | 0.942 | 1.075 | 210 |
+| FAISS | 6 | 0.000630 | 0.035 | 0.040 | 210 |
+| Qdrant | 6 | 0.008445 | 0.646 | 0.787 | 210 |
+| Chroma | 100 | 0.289389 | 1.043 | 1.216 | 210 |
+| FAISS | 100 | 0.000120 | 0.055 | 0.085 | 210 |
+| Qdrant | 100 | 0.032980 | 0.757 | 0.955 | 210 |
+| Chroma | 1000 | 0.364737 | 1.186 | 1.332 | 210 |
+| FAISS | 1000 | 0.000588 | 0.188 | 0.464 | 210 |
+| Qdrant | 1000 | 0.278777 | 2.729 | 3.396 | 210 |
 
 FAISS wins raw local speed. Qdrant is selected for the implemented service because it provides first-class payload filtering, a standalone REST/gRPC boundary, and persistent storage. Those properties reduce patient-isolation and operational risks that a bare FAISS index would leave to application code.
 
