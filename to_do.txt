@@ -1,0 +1,31 @@
+The project is complete as a strong prototype/research artifact, but it is missing several things needed for a reliable, deployable system.
+Highest-priority gaps:
+1. A reproducible Python environment
+   - There is no pyproject.toml, lockfile, or test configuration.
+   - requirement.txt is a very large machine-style dependency dump rather than a minimal, tested application dependency set.
+   - Test execution currently fails during collection: the available pytest runs under Python 3.10, while VS Code is configured for Python 3.12, and imports such as TrackA, TrackB, and tiers are not installed/resolved consistently.
+   - One dependency/API mismatch also appears: langgraph.graph cannot be imported in the active test environment.
+2. Working automated tests and CI
+   - The docs claim pytest -q TrackA TrackB tiers passes, but it currently stops with 7 collection errors.
+   - There is no GitHub Actions (or equivalent) pipeline to run linting, tests, Compose validation, and API smoke checks on every change.
+3. Service packaging and orchestration
+   - [docker-compose.yml](C:/Users/User/Documents/kafka project/docker-compose.yml) starts only Kafka and Qdrant.
+   - The edge, context, Tier 1, Tier 2, retrieval, and request services still require separate manual commands.
+   - Missing: service Dockerfiles, Compose entries, restart policies, dependency health checks, environment configuration, and a one-command end-to-end run.
+4. Production API safeguards
+   - The retrieval and request APIs have no authentication/authorization, rate limiting, audit trail, pagination, retention policy, or access controls.
+   - This is particularly important because patient identifiers and medical context are involved.
+   - The request API reads a JSONL file directly; that is fine for a demo, but not safe for concurrent writers or durable production auditing.
+5. Retrieval-data lifecycle
+   - Qdrant persistence exists, but there is no corpus/embedding version registry, migration strategy, provenance tracking, backup/restore procedure, or automatic safe rebuild workflow.
+   - Patient data deletion and correction workflows are also absent.
+6. Observability and operational resilience
+   - Health endpoints exist, but there are no structured logs, metrics, tracing, alerting, dead-letter handling, retry/backoff policy, Kafka consumer-group strategy, or failure-recovery runbook.
+7. Repository hygiene
+   - Generated artifacts are tracked: Python __pycache__, DeepEval cache/telemetry files, Chroma database binaries, and a small node_modules directory.
+   - [.gitignore](C:/Users/User/Documents/kafka project/.gitignore) ignores future cache files but does not remove already tracked ones.
+   - Missing common project metadata: LICENSE, SECURITY.md, .env.example, and contribution guidance.
+8. Validation appropriate for a healthcare-adjacent system
+   - The reports already acknowledge this well: no live full-stack validation, no clinical validation, no richer reviewed corpus, and limited benchmark repetitions.
+   - Before any real use, it needs clinical review, privacy/compliance assessment, threat modeling, false-negative analysis, load/failure testing, and human escalation workflows.
+The immediate practical next step is to add packaging plus a pinned Python 3.12 environment, then make pytest pass consistently. Until that is fixed, the project’s “reproducible automated checks” claim is not currently verifiable in this workspace.
