@@ -13,6 +13,7 @@ average/stdev/min/p50/p95/p99/max) and docs/raw_latencies/<store>_<n>.json
 from __future__ import annotations
 
 import os
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -27,6 +28,23 @@ BENCHMARK_SCRIPTS = [
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Remove prior aggregate and raw benchmark outputs before this run.",
+    )
+    args = parser.parse_args()
+
+    if args.fresh:
+        results_path = ROOT_DIR.parent / "docs" / "results.csv"
+        raw_dir = ROOT_DIR.parent / "docs" / "raw_latencies"
+        if results_path.exists():
+            results_path.unlink()
+        if raw_dir.exists():
+            for raw_file in raw_dir.glob("*.json"):
+                raw_file.unlink()
+
     for corpus_size in CORPUS_SIZES:
         for script in BENCHMARK_SCRIPTS:
             print("=" * 60)
