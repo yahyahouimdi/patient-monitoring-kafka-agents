@@ -8,15 +8,15 @@ The benchmark corpus is generated at three sizes: 6, 100, and 1000 documents. Th
 
 | Store | Documents | Index Time (s) | Avg Latency (ms) | Query Count | Notes |
 | --- | ---: | ---: | ---: | ---: | --- |
-| Chroma | 6 | 0.120899 | 1.920 | 3 | Measured run |
-| Chroma | 100 | 0.154131 | 1.978 | 3 | Measured run |
-| Chroma | 1000 | 0.413993 | 2.439 | 3 | Measured run |
-| FAISS | 6 | 0.000084 | 0.069 | 3 | Measured run |
-| FAISS | 100 | 0.000133 | 0.066 | 3 | Measured run |
-| FAISS | 1000 | 0.000578 | 0.203 | 3 | Measured run |
-| Qdrant | 6 | 0.012289 | 0.828 | 3 | Measured run |
-| Qdrant | 100 | 0.036456 | 1.148 | 3 | Measured run |
-| Qdrant | 1000 | 0.263583 | 3.485 | 3 | Measured run |
+| Chroma | 6 | 0.302457 | 0.942 | 210 | Canonical raw-data aggregate |
+| Chroma | 100 | 0.289389 | 1.043 | 210 | Canonical raw-data aggregate |
+| Chroma | 1000 | 0.364737 | 1.186 | 210 | Canonical raw-data aggregate |
+| FAISS | 6 | 0.000630 | 0.035 | 210 | Canonical raw-data aggregate |
+| FAISS | 100 | 0.000120 | 0.055 | 210 | Canonical raw-data aggregate |
+| FAISS | 1000 | 0.000588 | 0.188 | 210 | Canonical raw-data aggregate |
+| Qdrant | 6 | 0.008445 | 0.646 | 210 | Canonical raw-data aggregate |
+| Qdrant | 100 | 0.032980 | 0.757 | 210 | Canonical raw-data aggregate |
+| Qdrant | 1000 | 0.278777 | 2.729 | 210 | Canonical raw-data aggregate |
 
 ## A.2 Qualitative Comparison
 
