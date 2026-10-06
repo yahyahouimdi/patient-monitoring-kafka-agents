@@ -8,8 +8,8 @@ regardless of which candidate is calling them. Whatever wall-clock time
 is left over after subtracting the mocked stage costs is framework
 orchestration overhead.
 
-Usage:
-    PYTHONPATH=/home/claude python3 benchmark/run_benchmark.py [--repeats N]
+Usage (from the repository root):
+    python TrackA/benchmark/run_benchmark.py [--repeats N] [--warmups N]
 
 Writes benchmark/results.json and prints a summary table.
 """
@@ -83,12 +83,7 @@ def _run_crewai(patient_id, merged_state):
         _wait_for_stub_ready("127.0.0.1", 8877, timeout=10)
         _crewai_stub_started = True
 
-    # Build the stub LLM once and reuse it. Previously this was rebuilt on
-    # every call, but the monkey-patch that wires it into the agents was
-    # only ever installed once (guarded by _stub_patched below), so every
-    # stub_llm built after the first call was silently discarded -- the
-    # agents kept using the very first instance regardless. Building it
-    # once, up front, makes that explicit instead of accidental.
+    # Build the stub LLM once and reuse it across runs.
     if _crewai_stub_llm is None:
         _crewai_stub_llm = LLM(model="openai/gpt-4o-mini", base_url="http://127.0.0.1:8877/v1", api_key="sk-stub")
         # Force CrewAI's text-tool parser so the local stub can exercise the
@@ -96,19 +91,9 @@ def _run_crewai(patient_id, merged_state):
         # tool-call message objects.
         type(_crewai_stub_llm).supports_function_calling = lambda self: False
 
-    # Patch once: wrap _make_agents so every Agent uses the local stub LLM
-    # instead of requiring a real OpenAI key. Idempotent across calls.
-    if not getattr(mod, "_stub_patched", False):
-        base_make_agents = mod._make_agents
-
-        def patched_make_agents():
-            agents = base_make_agents()
-            for a in agents:
-                a.llm = _crewai_stub_llm
-            return agents
-
-        mod._make_agents = patched_make_agents
-        mod._stub_patched = True
+    # Hand the one shared stub LLM to every Agent at construction, so no
+    # agent builds (and then discards) a default OpenAI client per run.
+    mod.AGENT_LLM = _crewai_stub_llm
 
     return mod.run_pipeline(patient_id, merged_state)
 
@@ -188,57 +173,145 @@ def run_one(name, fn, patient_id, merged_state, seed):
     }
 
 
+def _percentile(values, pct):
+    """Linear-interpolated percentile, no numpy dependency."""
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    rank = (len(ordered) - 1) * pct / 100.0
+    low = int(rank)
+    high = min(low + 1, len(ordered) - 1)
+    return ordered[low] + (ordered[high] - ordered[low]) * (rank - low)
+
+
+def _stats_ms(seconds):
+    if not seconds:
+        return None
+    ms = [value * 1000 for value in seconds]
+    return {
+        "median": round(statistics.median(ms), 2),
+        "mean": round(statistics.mean(ms), 2),
+        "stdev": round(statistics.stdev(ms), 2) if len(ms) > 1 else None,
+        "p95": round(_percentile(ms, 95), 2),
+        "min": round(min(ms), 2),
+        "max": round(max(ms), 2),
+    }
+
+
+def summarize(runs):
+    """Summarize one candidate's timed runs.
+
+    Runs are split by the path they took, because the two paths are not
+    comparable: a full-pipeline run sleeps through the mocked retrieval and
+    model stages (hundreds of ms), while a gate-declined run returns before
+    any stage. Pooling them would make the median depend on the mix of
+    scenarios rather than on the framework.
+    """
+    ok_runs = [r for r in runs if r["error"] is None]
+    failed = [r for r in runs if r["error"] is not None]
+    summary = {
+        "n_runs": len(runs),
+        "n_ok": len(ok_runs),
+        "n_failed": len(failed),
+        "first_error": failed[0]["error"] if failed else None,
+    }
+    for path in ("full_pipeline", "gate_declined"):
+        path_runs = [r for r in ok_runs if r["path"] == path]
+        summary[path] = {
+            "n": len(path_runs),
+            "scenarios": sorted({r["patient_id"] for r in path_runs}),
+            "total_ms": _stats_ms([r["total_seconds"] for r in path_runs]),
+            "overhead_ms": _stats_ms([r["overhead_seconds"] for r in path_runs]),
+        }
+    return summary
+
+
+def environment_info():
+    import platform
+    from importlib import metadata
+
+    versions = {}
+    for package in ("langgraph", "pyautogen", "crewai"):
+        try:
+            versions[package] = metadata.version(package)
+        except metadata.PackageNotFoundError:
+            versions[package] = None
+    return {
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "processor": platform.processor(),
+        "packages": versions,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--repeats", type=int, default=30)
+    parser.add_argument("--warmups", type=int, default=1,
+                        help="untimed passes over every scenario before timing starts")
+    parser.add_argument("--candidates", nargs="+", default=list(CANDIDATES), choices=list(CANDIDATES))
     args = parser.parse_args()
 
-    all_results = {name: [] for name in CANDIDATES}
+    all_results = {name: [] for name in args.candidates}
 
-    for name, fn in CANDIDATES.items():
+    for name in args.candidates:
+        fn = CANDIDATES[name]
         print(f"\n=== {name} ===", file=sys.stderr)
+
+        # Warm-up: framework import, graph compilation, stub-server start-up
+        # and client construction are one-off process costs, not per-event
+        # orchestration overhead, so they are paid here and not recorded.
+        for warmup in range(args.warmups):
+            for patient_id, merged_state in EVENTS:
+                run_one(name, fn, patient_id, merged_state, stable_seed(patient_id, "warmup", warmup))
+
         for rep in range(args.repeats):
             for patient_id, merged_state in EVENTS:
                 seed = stable_seed(patient_id, rep)
                 run = run_one(name, fn, patient_id, merged_state, seed)
                 run["repeat"] = rep
+                run["path"] = "full_pipeline" if run["stage_log"] else "gate_declined"
                 all_results[name].append(run)
                 status = "OK" if run["error"] is None else f"ERROR: {run['error']}"
-                print(f"  [{rep}] {patient_id}: total={run['total_seconds']*1000:.0f}ms "
-                      f"overhead={run['overhead_seconds']*1000:.0f}ms  {status}", file=sys.stderr)
+                print(f"  [{rep}] {patient_id}: total={run['total_seconds']*1000:.1f}ms "
+                      f"overhead={run['overhead_seconds']*1000:.2f}ms  {status}", file=sys.stderr)
 
-    summary = {}
-    for name, runs in all_results.items():
-        ok_runs = [r for r in runs if r["error"] is None]
-        failed = [r for r in runs if r["error"] is not None]
-        totals = [r["total_seconds"] for r in ok_runs]
-        overheads = [r["overhead_seconds"] for r in ok_runs]
-        summary[name] = {
-            "n_runs": len(runs),
-            "n_ok": len(ok_runs),
-            "n_failed": len(failed),
-            "first_error": failed[0]["error"] if failed else None,
-            "mean_total_ms": round(statistics.mean(totals) * 1000, 1) if totals else None,
-            "median_total_ms": round(statistics.median(totals) * 1000, 1) if totals else None,
-            "mean_overhead_ms": round(statistics.mean(overheads) * 1000, 1) if overheads else None,
-            "median_overhead_ms": round(statistics.median(overheads) * 1000, 1) if overheads else None,
-            "stdev_overhead_ms": round(statistics.stdev(overheads) * 1000, 1) if len(overheads) > 1 else None,
-        }
+    summary = {name: summarize(runs) for name, runs in all_results.items()}
 
     out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results.json")
     with open(out_path, "w") as f:
-        json.dump({"summary": summary, "runs": all_results}, f, indent=2, default=str)
+        json.dump(
+            {
+                "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                "config": {
+                    "repeats": args.repeats,
+                    "warmups": args.warmups,
+                    "scenarios": [patient_id for patient_id, _ in EVENTS],
+                    "mocked_stage_base_seconds": instrumentation._STAGE_BASE_SECONDS,
+                    "mocked_stage_jitter_seconds": instrumentation._STAGE_JITTER_SECONDS,
+                },
+                "environment": environment_info(),
+                "summary": summary,
+                "runs": all_results,
+            },
+            f, indent=1, default=str,
+        )
 
     print("\n\n=== SUMMARY (orchestration overhead = total wall time minus mocked shared/ stage time) ===")
-    header = f"{'candidate':<10} {'n_ok/n_runs':<12} {'median total ms':<18} {'median overhead ms':<20} {'stdev overhead ms':<18}"
+    header = (f"{'candidate':<12} {'path':<14} {'n':>4} {'median ovh ms':>14} {'mean ovh ms':>12} "
+              f"{'stdev':>8} {'p95':>8} {'median total ms':>16}")
     print(header)
     print("-" * len(header))
     for name, s in summary.items():
-        ok_ratio = f"{s['n_ok']}/{s['n_runs']}"
-        print(f"{name:<10} {ok_ratio:<12} "
-              f"{str(s['median_total_ms']):<18} {str(s['median_overhead_ms']):<20} {str(s['stdev_overhead_ms']):<18}")
+        for path in ("full_pipeline", "gate_declined"):
+            block = s[path]
+            if not block["n"]:
+                continue
+            ovh, total = block["overhead_ms"], block["total_ms"]
+            print(f"{name:<12} {path:<14} {block['n']:>4} {ovh['median']:>14} {ovh['mean']:>12} "
+                  f"{str(ovh['stdev']):>8} {ovh['p95']:>8} {total['median']:>16}")
         if s["first_error"]:
-            print(f"    first error: {s['first_error']}")
+            print(f"    {s['n_failed']} failed run(s); first error: {s['first_error']}")
 
     print(f"\nFull results written to {out_path}")
 
