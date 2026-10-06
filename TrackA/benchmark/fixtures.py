@@ -22,6 +22,13 @@ topic, plus a "connectivity" sub-dict) -- so a TrackA candidate's
 run_pipeline(patient_id, merged_state) sees the same shape it would see
 from the real Tier-2 skeleton.
 
+Tier 1 is replayed too: every wearable reading goes through
+tiers.tier1_agent.evaluate(), and any alarm it raises is folded into the
+state under "alarms", exactly as Tier 2 would receive it from the alarms
+topic. Without that step the gate declines S1, S3 and S6 (their vitals are
+Tier 1's job, not weak-signal evidence), and the benchmark would time an
+early return instead of the pipeline.
+
 EVENTS = [(scenario_label, merged_state), ...] for S1 through S6.
 
 Run directly to print what gets built:
@@ -31,6 +38,8 @@ Run directly to print what gets built:
 import copy
 import json
 from pathlib import Path
+
+from tiers import tier1_agent
 
 SCENARIOS_PATH = Path(__file__).resolve().parent / "scenarios.json"
 
@@ -71,6 +80,8 @@ def _fold_event(state, topic, payload):
     tell the difference between this and a live-replayed state dict."""
     if topic == "device-connectivity":
         state.setdefault("connectivity", {})[payload["device_id"]] = bool(payload.get("connected"))
+    elif topic == "alarms":
+        state.setdefault("alarms", []).append(payload)
     else:
         state[topic] = payload
     state["_last_topic"] = topic
@@ -91,6 +102,7 @@ def build_merged_state(scenario_id, scenarios=None):
 
     state = {}
     _fold_event(state, "patient-profile", copy.deepcopy(PATIENT_PROFILE))
+    tier1_agent.connectivity_state.clear()
 
     for event in scenarios[scenario_id]["events"]:
         payload = copy.deepcopy(event["payload"])
@@ -100,6 +112,17 @@ def build_merged_state(scenario_id, scenarios=None):
             payload["device_id"] = DEVICE_ID
         _fold_event(state, event["topic"], payload)
 
+        if event["topic"] == "device-connectivity":
+            tier1_agent.connectivity_state[DEVICE_ID] = bool(payload.get("connected"))
+        elif event["topic"] == "wearable-vitals":
+            severity, reason = tier1_agent.evaluate(payload)
+            if severity is not None:
+                alarm = tier1_agent.build_alarm(payload, severity, reason)
+                # Fixed timestamp, like every other replayed event.
+                alarm["timestamp"] = _FIXED_TS
+                _fold_event(state, "alarms", alarm)
+
+    tier1_agent.connectivity_state.clear()
     return state
 
 
