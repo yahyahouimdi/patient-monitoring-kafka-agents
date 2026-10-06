@@ -4,7 +4,9 @@ benchmark/local_llm_stub.py
 Minimal OpenAI-compatible HTTP stub so CrewAI's LLM class (which expects
 an OpenAI-shaped /v1/chat/completions endpoint) can run without a real
 API key or network access. It emits the text-tool format CrewAI expects,
-so each task exercises the framework's own tool dispatcher.
+so each task exercises the framework's own tool dispatcher: one "Action"
+turn that requests the stage's tool, then one "Final Answer" turn once the
+tool's Observation is in the conversation (2 LLM round trips per task).
 
 Usage:
     from benchmark.local_llm_stub import start
@@ -54,17 +56,29 @@ class _StubHandler(BaseHTTPRequestHandler):
             for message in messages
             if isinstance(message, dict)
         )
+        # CrewAI appends the tool result to the conversation as an
+        # "Observation:" turn. Once it is there the stage has run, so the
+        # stub must answer with a Final Answer -- matching on the task
+        # description alone (which is present on every turn) would request
+        # the same tool forever and run each agent to its iteration cap.
+        tool_already_ran = any(
+            isinstance(message, dict)
+            and message.get("role") != "system"
+            and "Observation:" in str(message.get("content", ""))
+            for message in messages
+        )
         tool_name = None
-        for candidate in (
-            "gate_check",
-            "retrieve_context",
-            "call_reasoning_model",
-            "apply_severity_mapping",
-            "emit_network_request",
-        ):
-            if f"Call {candidate}" in prompt or f"call {candidate}" in prompt:
-                tool_name = candidate
-                break
+        if not tool_already_ran:
+            for candidate in (
+                "gate_check",
+                "retrieve_context",
+                "call_reasoning_model",
+                "apply_severity_mapping",
+                "emit_network_request",
+            ):
+                if f"Call {candidate}" in prompt or f"call {candidate}" in prompt:
+                    tool_name = candidate
+                    break
 
         if tool_name:
             message = {

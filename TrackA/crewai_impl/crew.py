@@ -56,7 +56,7 @@ def retrieve_context_tool() -> str:
     if not _ctx.get("should_reason"):
         return "skipped -- gate declined"
     ps = _ctx["patient_state"]
-    query = f"patient {ps.patient_id} history {ps.maladie or ''}"
+    query = retrieval_client.build_query(ps)
     _ctx["retrieved"] = retrieval_client.search(query, patient_id=ps.patient_id)
     return f"retrieved {len(_ctx['retrieved'])} snippet(s)"
 
@@ -105,8 +105,18 @@ def emit_network_request_tool() -> str:
 # no delegation, no allowed variance in tool choice.
 # ---------------------------------------------------------------------------
 
+# Optional shared LLM handed to every Agent at construction. Left as None in
+# production (CrewAI then resolves its LLM from the environment). The
+# benchmark sets it to one reusable stub LLM: without it each Agent() builds
+# its own default OpenAI client, and that client construction (about 1 s per
+# agent on the benchmark machine) would be billed as orchestration overhead.
+AGENT_LLM = None
+
+
 def _make_agents():
     common_kwargs = dict(verbose=False, allow_delegation=False)
+    if AGENT_LLM is not None:
+        common_kwargs["llm"] = AGENT_LLM
     gate_agent = Agent(
         role="Reasoning Gate",
         goal="Decide whether this patient event warrants Tier-2 reasoning.",
