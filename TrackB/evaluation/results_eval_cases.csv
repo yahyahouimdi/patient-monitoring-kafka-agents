@@ -1,0 +1,57 @@
+framework,metric,case,question,score
+RAGAS,faithfulness,1,Patient P001 low oxygen relevant history,0.5
+RAGAS,faithfulness,2,What is bradycardia,1.0
+RAGAS,faithfulness,3,Fall and low SpO2 risk,1.0
+RAGAS,faithfulness,4,Why would a hot room and a missed medication dose matter together?,1.0
+RAGAS,faithfulness,5,Can a real fall happen without the fall sensor triggering?,1.0
+RAGAS,faithfulness,6,What does it mean if a patient doesn't respond to a check-in?,1.0
+RAGAS,faithfulness,7,Should an alarm be suppressed if connectivity drops briefly?,1.0
+RAGAS,answer_relevancy,1,Patient P001 low oxygen relevant history,0.6799
+RAGAS,answer_relevancy,2,What is bradycardia,0.767
+RAGAS,answer_relevancy,3,Fall and low SpO2 risk,0.0
+RAGAS,answer_relevancy,4,Why would a hot room and a missed medication dose matter together?,0.0
+RAGAS,answer_relevancy,5,Can a real fall happen without the fall sensor triggering?,0.9778
+RAGAS,answer_relevancy,6,What does it mean if a patient doesn't respond to a check-in?,0.9342
+RAGAS,answer_relevancy,7,Should an alarm be suppressed if connectivity drops briefly?,0.8784
+RAGAS,context_precision,1,Patient P001 low oxygen relevant history,0.3333
+RAGAS,context_precision,2,What is bradycardia,1.0
+RAGAS,context_precision,3,Fall and low SpO2 risk,0.8333
+RAGAS,context_precision,4,Why would a hot room and a missed medication dose matter together?,1.0
+RAGAS,context_precision,5,Can a real fall happen without the fall sensor triggering?,1.0
+RAGAS,context_precision,6,What does it mean if a patient doesn't respond to a check-in?,1.0
+RAGAS,context_precision,7,Should an alarm be suppressed if connectivity drops briefly?,1.0
+RAGAS,context_recall,1,Patient P001 low oxygen relevant history,1.0
+RAGAS,context_recall,2,What is bradycardia,1.0
+RAGAS,context_recall,3,Fall and low SpO2 risk,1.0
+RAGAS,context_recall,4,Why would a hot room and a missed medication dose matter together?,1.0
+RAGAS,context_recall,5,Can a real fall happen without the fall sensor triggering?,0.5
+RAGAS,context_recall,6,What does it mean if a patient doesn't respond to a check-in?,1.0
+RAGAS,context_recall,7,Should an alarm be suppressed if connectivity drops briefly?,0.5
+DeepEval,faithfulness,1,Patient P001 low oxygen relevant history,0.0
+DeepEval,faithfulness,2,What is bradycardia,1.0
+DeepEval,faithfulness,3,Fall and low SpO2 risk,0.8
+DeepEval,faithfulness,4,Why would a hot room and a missed medication dose matter together?,0.0
+DeepEval,faithfulness,5,Can a real fall happen without the fall sensor triggering?,1.0
+DeepEval,faithfulness,6,What does it mean if a patient doesn't respond to a check-in?,0.0
+DeepEval,faithfulness,7,Should an alarm be suppressed if connectivity drops briefly?,1.0
+DeepEval,answer_relevancy,1,Patient P001 low oxygen relevant history,1.0
+DeepEval,answer_relevancy,2,What is bradycardia,1.0
+DeepEval,answer_relevancy,3,Fall and low SpO2 risk,1.0
+DeepEval,answer_relevancy,4,Why would a hot room and a missed medication dose matter together?,1.0
+DeepEval,answer_relevancy,5,Can a real fall happen without the fall sensor triggering?,0.5
+DeepEval,answer_relevancy,6,What does it mean if a patient doesn't respond to a check-in?,0.0
+DeepEval,answer_relevancy,7,Should an alarm be suppressed if connectivity drops briefly?,0.6667
+DeepEval,contextual_precision,1,Patient P001 low oxygen relevant history,1.0
+DeepEval,contextual_precision,2,What is bradycardia,1.0
+DeepEval,contextual_precision,3,Fall and low SpO2 risk,1.0
+DeepEval,contextual_precision,4,Why would a hot room and a missed medication dose matter together?,1.0
+DeepEval,contextual_precision,5,Can a real fall happen without the fall sensor triggering?,1.0
+DeepEval,contextual_precision,6,What does it mean if a patient doesn't respond to a check-in?,1.0
+DeepEval,contextual_precision,7,Should an alarm be suppressed if connectivity drops briefly?,1.0
+DeepEval,contextual_recall,1,Patient P001 low oxygen relevant history,1.0
+DeepEval,contextual_recall,2,What is bradycardia,0.3333
+DeepEval,contextual_recall,3,Fall and low SpO2 risk,1.0
+DeepEval,contextual_recall,4,Why would a hot room and a missed medication dose matter together?,0.3333
+DeepEval,contextual_recall,5,Can a real fall happen without the fall sensor triggering?,1.0
+DeepEval,contextual_recall,6,What does it mean if a patient doesn't respond to a check-in?,1.0
+DeepEval,contextual_recall,7,Should an alarm be suppressed if connectivity drops briefly?,0.0
