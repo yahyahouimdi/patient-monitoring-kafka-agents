@@ -102,10 +102,42 @@ def _score_signals(state: PatientState) -> float:
     return score
 
 
+def situation_fingerprint(state: PatientState) -> tuple:
+    """What the gate and the guardrail would base a decision on, reduced to
+    its discrete parts: the active alarm, the rule-table severity, and
+    which weak signals are present. Two states with the same fingerprint
+    would get the same treatment, so Tier 2 need not reason about the
+    second one again (see dispatch.ReasoningDebouncer)."""
+    alarm = state.last_alarm or {}
+    hr = state.heart_rate
+    if hr is None:
+        hr_band = None
+    elif hr > rules.HR_HIGH_HIGH or hr < rules.HR_HIGH_LOW:
+        hr_band = "out_of_band"
+    elif _hr_concern_score(hr) > 0:
+        hr_band = "near_edge"
+    else:
+        hr_band = "safe"
+    return (
+        alarm.get("severity"),
+        str(alarm.get("reason", "")).split("(", 1)[0].strip(),
+        rules.rule_table_severity(state)[0],
+        hr_band,
+        state.dose_taken == 0,
+        state.alone == 1,
+        state.room_temperature is not None and state.room_temperature >= rules.ROOM_TEMP_HOT,
+        state.connected is False,
+        state.fall_detection,
+        state.smart_speaker_max_dcb is not None and state.smart_speaker_max_dcb >= rules.SPEAKER_LOUD_DB,
+        state.checkin_response,
+    )
+
+
 def should_reason_about(state: PatientState) -> bool:
-    # Tier 1 already alarmed. Tier 2 never re-decides the alarm itself --
-    # it may only attach a confidence note (S6) or log agreement with
-    # what Tier 1 already did. Structural, not scored.
+    # Tier 1 has an ACTIVE alarm (PatientState drops expired ones). Tier 2
+    # never re-decides the alarm itself -- it may only attach a confidence
+    # note (S6) or log agreement with what Tier 1 already did. Structural,
+    # not scored.
     if state.last_alarm is not None:
         return True
 

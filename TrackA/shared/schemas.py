@@ -7,8 +7,11 @@ Phase 1. Only the pipeline wiring changes between frameworks -- these
 shapes, and every function in shared/, do not.
 """
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 import json
 from typing import Optional, Literal
+
+from .config import settings
 
 Severity = Literal["normal", "moderate", "high", "critical"]
 
@@ -35,7 +38,7 @@ class PatientState:
     maladie: Optional[str] = None
     medecin_responsable: Optional[str] = None
 
-    last_alarm: Optional[dict] = None  # most recent Tier-1 alarm, if any
+    last_alarm: Optional[dict] = None  # most severe ACTIVE Tier-1 alarm, if any
     event_log: list[dict] = field(default_factory=list)
     scenario_id: Optional[str] = None
     raw: dict = field(default_factory=dict)  # full merged dict, for logging
@@ -45,11 +48,16 @@ class PatientState:
         """state is exactly tier2_agent.py's patient_state[pid] as built by
         its existing update_state() -- this function does not change that
         logic, only reads its output."""
+        # The context agent's normalized view (patient-context topic). It is
+        # the fallback for anything Tier 2 has not seen on the raw topics
+        # itself, e.g. right after a restart; a raw event always wins.
+        context = (state.get("patient-context", {}) or {}).get("context", {}) or {}
+
         wearable = state.get("wearable-vitals", {}) or {}
-        smarthome = state.get("smarthome-context", {}) or {}
-        profile = state.get("patient-profile", {}) or {}
+        smarthome = state.get("smarthome-context") or context.get("smarthome-context") or {}
+        profile = state.get("patient-profile") or context.get("patient-profile") or {}
         alarms = state.get("alarms", []) or []
-        connectivity = state.get("connectivity", {}) or {}
+        connectivity = {**(context.get("connectivity") or {}), **(state.get("connectivity") or {})}
         device_id = wearable.get("device_id")
         connected = connectivity.get(device_id, True) if device_id else True
         event_log = state.get("event_log", []) or []
@@ -82,11 +90,46 @@ class PatientState:
             age=profile.get("age"),
             maladie=profile.get("maladie"),
             medecin_responsable=profile.get("medecin_responsable"),
-            last_alarm=alarms[-1] if alarms else None,
+            last_alarm=active_alarm(alarms, state.get("_last_updated")),
             event_log=event_log,
             scenario_id=scenario_id,
             raw=state,
         )
+
+
+_SEVERITY_RANK = {"normal": 0, "moderate": 1, "high": 2, "critical": 3}
+
+
+def _parse_time(value) -> Optional[datetime]:
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def active_alarm(alarms: list, reference_time=None) -> Optional[dict]:
+    """The most severe Tier 1 alarm raised within ALARM_ACTIVE_WINDOW_S of
+    `reference_time` (default: now), latest first on ties; None if every
+    alarm has expired.
+
+    Without the window, one alarm marked its patient forever: every later
+    event passed the gate and the guardrail kept the old severity as a
+    floor indefinitely. An alarm whose timestamp cannot be read is treated
+    as active, so a malformed alarm is never silently dropped.
+    """
+    reference = _parse_time(reference_time) or datetime.now(timezone.utc)
+    active = []
+    for alarm in alarms:
+        if not isinstance(alarm, dict):
+            continue
+        raised_at = _parse_time(alarm.get("timestamp"))
+        if raised_at is None or (reference - raised_at).total_seconds() <= settings.ALARM_ACTIVE_WINDOW_S:
+            active.append(alarm)
+    if not active:
+        return None
+    top_rank = max(_SEVERITY_RANK.get(alarm.get("severity"), 0) for alarm in active)
+    return [alarm for alarm in active if _SEVERITY_RANK.get(alarm.get("severity"), 0) == top_rank][-1]
 
 
 def event_log_narrative(state: PatientState, limit: int = 12) -> str:
