@@ -26,6 +26,11 @@ except ImportError:
     # script's own directory on sys.path, so config.py is findable either way.
     from config import settings
 
+try:
+    from . import rules
+except ImportError:
+    import rules
+
 logger = logging.getLogger(__name__)
 
 # Kept as a distinct, greppable tag so stub output is never mistaken for a
@@ -41,14 +46,55 @@ def get_health_url() -> str:
     return settings.RETRIEVAL_SERVICE_URL.rsplit("/search", 1)[0] + "/health"
 
 
+def build_query(state) -> str:
+    """Describe the patient AND the current situation, so retrieval can
+    return the clinical notes that apply to it (the previous query,
+    "patient <id> history <diagnosis>", was the same whatever was
+    happening). Deterministic: built from the state, never by a model."""
+    parts = [f"patient {state.patient_id}"]
+    if state.maladie:
+        parts.append(str(state.maladie))
+
+    signals = []
+    if state.last_alarm:
+        signals.append(str(state.last_alarm.get("reason", "")).split("(", 1)[0].strip())
+    if state.fall_detection == 1:
+        signals.append("fall detected")
+    if state.spo2 is not None and state.spo2 < rules.SPO2_CRITICAL:
+        signals.append("low oxygen saturation")
+    if state.heart_rate is not None:
+        if state.heart_rate > rules.HR_HIGH_HIGH:
+            signals.append("heart-rate spike")
+        elif state.heart_rate < rules.HR_HIGH_LOW:
+            signals.append("slow heart rate, bradycardia")
+    if state.room_temperature is not None and state.room_temperature >= rules.ROOM_TEMP_HOT:
+        signals.append("hot room")
+    if state.dose_taken == 0:
+        signals.append("missed medication dose")
+    if state.alone == 1:
+        signals.append("patient alone")
+    if state.smart_speaker_max_dcb is not None and state.smart_speaker_max_dcb >= rules.SPEAKER_LOUD_DB:
+        signals.append("loud noise")
+    if state.checkin_response == "no_response":
+        signals.append("no response to check-in")
+    if state.connected is False:
+        signals.append("connectivity dropout during alarm reading")
+
+    unique = list(dict.fromkeys(signal for signal in signals if signal))
+    if unique:
+        parts.append("; ".join(unique))
+    return ", ".join(parts)
+
+
 def search(query: str, k: int = None, patient_id: str = None) -> list:
     """Returns up to k short text snippets. Never raises -- falls back to
     the stub so a Track B outage degrades reasoning quality, not Tier 2
     latency.
 
     patient_id is optional and passed straight through to Track B's
-    payload-filtering (see retrieval_service.py); omit it to search the
-    whole knowledge base.
+    payload-filtering (see retrieval_service.py): with it, results are
+    limited to that patient's own documents plus the general clinical
+    notes; omit it to search the whole knowledge base.
     """
     k = k or settings.RETRIEVAL_K
     try:

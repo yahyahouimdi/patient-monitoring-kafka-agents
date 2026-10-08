@@ -117,7 +117,7 @@ def run_pipeline(patient_id: str, merged_state: dict, producer=None) -> Optional
 
     executor = _build_executor()
 
-    query = f"patient {ps.patient_id} history {ps.maladie or ''}"
+    query = retrieval_client.build_query(ps)
     _call(executor, "retrieve_context", query=query)
 
     narrative = (
