@@ -13,7 +13,7 @@ The architecture intentionally separates:
 
 This is the critical design decision for fairness: every candidate executes the same retrieval, reasoning, rule-table guardrail, and emission flow, while only the orchestration framework changes.
 
-The benchmark results support LangGraph as the best production fit for this project profile: it has low overhead and an explicit state graph, while the native pipeline provides a useful lower-bound reference.
+The framework benchmark shows that LangGraph, AutoGen and a native pipeline all add only a few milliseconds per event, while CrewAI adds hundreds. LangGraph is chosen for its explicit state graph and conditional edges; overhead alone does not separate it from AutoGen or the native baseline.
 
 For the final requirement map and residual work, see [FINAL_REPORT.md](FINAL_REPORT.md) and [../docs/implementation_status.md](../docs/implementation_status.md).
 
@@ -40,9 +40,12 @@ The Kafka consumer in `TrackA/tier2_agent.py` listens to:
 - `smarthome-context`
 - `device-connectivity`
 - `patient-profile`
+- `patient-context`
 - `alarms`
 
-`update_state()` merges each message into a per-patient dictionary. Then `PatientState.from_merged_dict()` converts that raw state into a typed, interpretable object.
+`update_state()` merges each message into a per-patient dictionary. Then `PatientState.from_merged_dict()` converts that raw state into a typed, interpretable object. The context agent's `patient-context` aggregate is used as the fallback for home context, profile and connectivity that Tier 2 has not received on the raw topics itself.
+
+At start-up the agent replays the retained `patient-profile`, `smarthome-context`, `device-connectivity` and `patient-context` topics (`tiers/kafka_replay.py`), so a restart does not lose profiles or context. Vitals and alarms are not replayed: a reading from before the restart must not drive a decision now.
 
 This merges both sensor streams and the prior Tier 1 alarm so the model can reason over both the raw state and the already-fired alarm state.
 
@@ -61,19 +64,20 @@ This matters because the system is meant to detect patterns such as:
 
 The gate is designed to fire when the evidence is meaningful, even if the exact combination is not one of the original demo fixtures.
 
-If `state.last_alarm is not None`, the gate always returns `True` because Tier 1 already fired and Tier 2 is not allowed to suppress that alarm.
+If the patient has an active Tier 1 alarm, the gate always returns `True`, because Tier 1 already fired and Tier 2 is not allowed to suppress that alarm. An alarm is active for `ALARM_ACTIVE_WINDOW_S` (120 s by default) after it was raised; Tier 1 repeats the alarm of a persisting condition every 30 s, so an older alarm belongs to an episode that has ended. Once it expires it no longer opens the gate and no longer acts as a severity floor.
+
+Passing the gate does not always mean a model call. `shared/dispatch.py` skips reasoning when the situation (active alarm, rule-table severity, set of weak signals) is unchanged since the last run, for up to `REASON_COOLDOWN_S` (60 s), and runs the pipeline on a worker pool so that one slow model call never blocks event intake or another patient. Runs for the same patient are sequential, and only the newest pending state is kept.
 
 ### 3. Retrieval
 
 `shared/retrieval_client.py` fetches background information from the Track B retrieval service, or falls back gracefully if that service is unavailable.
 
-The query is intentionally simple and deterministic:
+The query is built deterministically from the state by `retrieval_client.build_query()`:
 
-- patient ID
-- diagnosis/history string
-- contextual patient metadata
+- patient ID and diagnosis
+- the signals that are present: the alarm reason, fall, low oxygen, heart-rate spike or slow heart rate, hot room, missed dose, patient alone, loud noise, unanswered check-in, connectivity dropout
 
-This keeps retrieval cheap and explainable rather than letting the model wander into unsupported context generation.
+The search is scoped to the patient: the service returns that patient's own documents plus the general clinical notes, and never another patient's documents. The patient's best document is always included. For S4, for example, the result is the patient profile and the note on hot room plus missed medication.
 
 ### 4. Reasoning model call
 
@@ -128,6 +132,7 @@ TrackA/
 │   ├── retrieval_client.py
 │   ├── reasoning_client.py
 │   ├── guardrail.py
+│   ├── dispatch.py
 │   └── emission.py
 ├── langgraph_impl/
 │   └── graph.py
@@ -149,22 +154,54 @@ TrackA/
 └── ...
 ```
 
-The framework comparison is intentionally fair because each candidate uses the same shared logic and the same patient states; only the orchestration layer differs.
+Every candidate uses the same shared logic and the same patient states; only the orchestration layer differs.
 
 ## Benchmark result: what was measured
 
-The benchmark in `TrackA/benchmark/run_benchmark.py` compares four orchestration candidates using the same synthetic patient events and identical mocked retrieval, reasoning, and emission costs. The fourth candidate is a deliberately small native-Python handoff baseline.
+The benchmark in `TrackA/benchmark/run_benchmark.py` runs four candidates on the six scenarios with identical mocked retrieval, model and emission costs, so the remaining wall-clock time is orchestration overhead. One untimed warm-up pass per candidate is followed by 30 timed repeats (180 runs per candidate). Results are in `TrackA/benchmark/results.json`.
 
-The actual result file is `TrackA/benchmark/results.json` and the summary is:
+Runs are reported by the path they took, because the two paths are not comparable. Five scenarios run the full pipeline (S1, S3, S5 and S6 through their Tier 1 alarm, S4 through the weak-signal score; 150 runs). S2 is declined by the gate (30 runs).
 
-| Candidate | n_ok / n_runs | Median total ms | Median overhead ms | Notes |
-|---|---:|---:|---:|---|
-| LangGraph | 6 / 6 | 318.1 | 1.9 | Low overhead, straightforward graph flow |
-| AutoGen | 6 / 6 | 317.9 | 1.3 | Low median overhead with higher variance |
-| CrewAI | 6 / 6 | 23402.7 | 23010.1 | Substantially slower for this fixed pipeline |
-| Lightweight native pipeline | 6 / 6 | 1.8 | 0.8 | Dependency-free lower-bound baseline |
+| Candidate | Full pipeline: median overhead (ms) | P95 (ms) | Gate declined: median overhead (ms) |
+| --- | ---: | ---: | ---: |
+| Lightweight native | 1.31 | 1.96 | 0.18 |
+| AutoGen | 3.67 | 4.95 | 0.15 |
+| LangGraph | 6.63 | 7.92 | 2.16 |
+| CrewAI | 649.84 | 710.19 | 637.19 |
 
-The benchmark shows that LangGraph and AutoGen have similarly low overhead for the measured path, while CrewAI adds substantial dispatch cost. LangGraph remains the recommendation because its explicit state graph and conditional edges match this workflow directly.
+How to read it:
+
+- **LangGraph, AutoGen and the native pipeline all add single-digit milliseconds.** Against a model call that takes about 3 s on this machine (see the ablation), the differences between them are irrelevant. Overhead does not separate these three candidates.
+- **CrewAI adds about 0.65 s per event, and that understates its real cost.** Its five agents each make two LLM round trips to dispatch one tool (10 per event); the benchmark answers them instantly from a local stub. With a real model each of those would be an additional model call. It also cannot skip tasks, so it pays the same cost when the gate declines. An earlier run on the same machine measured 0.24-0.69 s, so treat the figure as "hundreds of milliseconds".
+- The AutoGen adapter calls its registered functions through `UserProxyAgent.execute_function()` in a fixed order and checks the gate before any AutoGen object is built. It measures AutoGen's function dispatch, not an agent conversation, which would add LLM round trips of its own.
+- The mocked stages are sleeps of about 0.66 s in total; every candidate's total time is that plus its overhead.
+
+An earlier version of this table reported 23 s of overhead for CrewAI and "318 ms against 1.8 ms" totals. Both were artifacts: the stub LLM never returned a final answer, so every CrewAI agent ran to its iteration limit (130 requests per event), and the medians pooled gate-declined runs, full runs and import time. Those numbers have been replaced.
+
+## Rule table versus the real model
+
+The rule-vs-reasoning ablation runs the real pipeline with the real model: `qwen2.5:3b` through Ollama, retrieval from the running Track B service (the patient's profile plus three general clinical notes per call), five runs per scenario. The raw model answer is recorded next to the guarded final severity in `docs/ablation_results.csv`.
+
+| Scenario | Rule table | Model's raw answer (5 runs) | Final after guardrail | Designed outcome | Result |
+| --- | --- | --- | --- | --- | --- |
+| S1 | critical | high x5 | critical x5 | critical | Model under-rated it; the guardrail kept the critical floor |
+| S2 | normal | not called (gate declined) | normal x5 | normal | As designed, no model call |
+| S3 | moderate | high x5 | high x5 | moderate | Over-escalated in every run |
+| S4 | normal | high x5 | high x5 | moderate | Escalated as intended, but one level too far |
+| S5 | moderate | high x5 | high x5 | high | As designed |
+| S6 | high | high x5 | high x5, confidence `uncertain_connectivity_drop` | high | As designed |
+
+What the run shows:
+
+- **The model answered "high" in all 25 calls**, whatever the scenario. It matched the designed outcome in S5 and S6, where "high" is the designed answer, and missed it in S1, S3 and S4.
+- **The guardrail did its job in the case that matters most.** In S1 (fall, SpO2 85%) the model said "high" every time; the final severity stayed critical because the rule table and the Tier 1 alarm set the floor.
+- **The cost of an escalate-only guardrail is over-escalation.** Nothing stops the model from raising a moderate case to high (S3, S4). With this model, Tier 2 adds alarm load rather than discrimination.
+- **Better context did not change the answer.** An earlier run, in which retrieval returned only the patient profile, gave the same picture ("high" in 23 of 25 calls). The limit is the model, not the retrieved context.
+- A model call took about 2.9 s once the model was loaded.
+
+So the architecture's safety property is demonstrated; the usefulness of this particular model as a reasoning tier is not. Six scenarios are also far too few to estimate an error rate. The next step is a labelled set of scenario variants and a comparison of several local models, reporting under-triage and over-escalation rates.
+
+`python -m TrackA.ablation --scripted` replaces the model with a fixed lookup. That mode exists only to test the pipeline wiring; its output is labelled `scripted-stub` and is not checked in.
 
 ## Why LangGraph is the best choice for this project
 
@@ -230,18 +267,14 @@ This is a better match than AutoGen's agent conversation structure, which adds a
 
 ### 5) Latency overhead
 
-This is the clearest technical advantage.
+Measured on the full-pipeline path (median, 150 runs each):
 
-From the benchmark summary:
+- Lightweight native: 1.3 ms
+- AutoGen: 3.7 ms
+- LangGraph: 6.6 ms
+- CrewAI: 650 ms
 
-- LangGraph median overhead: 1.9 ms
-- AutoGen median overhead: 1.3 ms
-- CrewAI median overhead: 23010.1 ms
-- Lightweight native median overhead: 0.8 ms
-
-The gap is large enough that it is not a minor difference. For a near-real-time monitoring system, even a few hundred milliseconds matter. CrewAI's overhead makes it a poor fit for this fixed, low-latency, rules-first pipeline.
-
-This is especially important because the actual LLM call is already a relatively expensive operation. Adding a second, framework-induced orchestration tax is not a good trade when the system's logic is already explicit and fixed.
+LangGraph is not the lowest-overhead option; the native pipeline and the AutoGen dispatcher are both lower. The three are within about 5 ms of each other, which is negligible next to a model call of about 3 s, so latency is a reason to rule out CrewAI and not a reason to prefer LangGraph over the other two. CrewAI's figure also excludes the ten extra LLM round trips per event that its agent dispatch would make against a real model.
 
 ### 6) Debuggability / observability
 
@@ -308,14 +341,14 @@ For this Track A pipeline, LangGraph is the most solid choice because it matches
 - low orchestration overhead
 - easy observation and debugging
 
-It is the best balance of control, transparency, and operational efficiency. The benchmark results in `TrackA/benchmark/results.json` back this conclusion with concrete numbers.
+It is the best balance of control and transparency for this workflow. The benchmark in `TrackA/benchmark/results.json` shows its overhead is negligible; it does not show that LangGraph is faster than AutoGen or a plain Python pipeline, and the native pipeline in `lightweight_impl/` remains a valid, dependency-free alternative.
 
 ## Quick run instructions
 
 ```bash
 cd "c:\Users\User\Documents\kafka project"
 python -m pip install -r requirement.txt
-python TrackA/tier2_agent.py
+python -m TrackA.tier2_agent
 ```
 
 Requirements:
