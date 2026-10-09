@@ -67,6 +67,8 @@ Tier 1 is the immediate-response layer. It reads alarm-producing inputs such as 
 
 This layer is intentionally simple and human-auditable. It is not trying to infer intent; it is trying to enforce a stable safety threshold.
 
+Its thresholds come from the same rule table (`TrackA/shared/rules.json`) that the Tier 2 guardrail uses as its floor, so the two tiers cannot disagree. Physically impossible readings (heart rate 0, SpO2 above 100) are flagged as a sensor fault to verify. The first alarm of an episode, any escalation and any new cause are published immediately; an unchanged condition is repeated every 30 seconds instead of on every reading.
+
 ### Tier 2: reasoning and retrieval layer
 
 Tier 2 sits behind Tier 1 and reasons only when the situation deserves a deeper look. It combines:
@@ -158,8 +160,8 @@ This diagram shows the separation between:
 
 This is the actual production-style flow used in Track A:
 
-- incoming patient state is assembled
-- a cheap gate decides whether to reason
+- incoming patient state is assembled (and rebuilt from Kafka after a restart)
+- a cheap gate decides whether to reason; an unchanged situation is not reasoned about twice, and reasoning runs on a worker pool so it never blocks event intake
 - retrieval fetches context
 - the reasoning model is called once
 - the guardrail enforces safety rules
@@ -238,36 +240,31 @@ The main architectural comparison happens in [TrackA/README.md](TrackA/README.md
 
 ### Reasoning framework comparison
 
-The Track A evaluation compares three orchestration frameworks plus a dependency-free native baseline:
+The Track A evaluation compares three orchestration frameworks plus a dependency-free native baseline (LangGraph, AutoGen, CrewAI, lightweight native pipeline) on identical mocked stage costs: one warm-up pass, then 30 timed repeats of the six scenarios per candidate. Orchestration overhead, from [TrackA/benchmark/results.json](TrackA/benchmark/results.json):
 
-- LangGraph
-- AutoGen
-- CrewAI
-- lightweight native pipeline
+| Candidate | Full pipeline: median overhead (ms) | P95 (ms) | Gate declined: median overhead (ms) |
+| --- | ---: | ---: | ---: |
+| Lightweight native | 1.31 | 1.96 | 0.18 |
+| AutoGen | 3.67 | 4.95 | 0.15 |
+| LangGraph | 6.63 | 7.92 | 2.16 |
+| CrewAI | 649.84 | 710.19 | 637.19 |
 
-The benchmark results show:
+LangGraph, AutoGen and the native pipeline all add a few milliseconds, which is negligible next to a model call of about 3 s. CrewAI adds about 0.65 s per event even with an instant stub model, and would add ten extra model calls per event against a real one. The project chooses LangGraph for its explicit state graph and conditional edges; the benchmark rules out CrewAI but does not separate LangGraph from AutoGen or the native pipeline.
 
-| Candidate | Median total ms | Median overhead ms |
-| --- | ---: | ---: |
-| LangGraph | 318.1 | 1.9 |
-| AutoGen | 317.9 | 1.3 |
-| CrewAI | 23402.7 | 23010.1 |
-| Lightweight native | 1.8 | 0.8 |
+### Rule table versus the real model
 
-These values come from [TrackA/benchmark/results.json](TrackA/benchmark/results.json).
+The ablation runs the real pipeline with `qwen2.5:3b` and the live retrieval service, five times per scenario ([TrackA/docs/ablation_results.csv](TrackA/docs/ablation_results.csv)):
 
-The project chooses LangGraph because it is the best match for a fixed-state, event-driven reasoning workflow with a single gate and low-latency execution overhead.
+| Scenario | Rule table | Model's raw answer (5 runs) | Final after guardrail | Designed outcome | Result |
+| --- | --- | --- | --- | --- | --- |
+| S1 | critical | high x5 | critical x5 | critical | Model under-rated it; the guardrail kept the critical floor |
+| S2 | normal | not called (gate declined) | normal x5 | normal | As designed, no model call |
+| S3 | moderate | high x5 | high x5 | moderate | Over-escalated in every run |
+| S4 | normal | high x5 | high x5 | moderate | Escalated as intended, but one level too far |
+| S5 | moderate | high x5 | high x5 | high | As designed |
+| S6 | high | high x5 | high x5, confidence `uncertain_connectivity_drop` | high | As designed |
 
-The Track A README includes the full breakdown of:
-
-- install effort (hours)
-- supported agent topologies
-- state-persistence model
-- integration with a self-hosted reasoning model
-- latency overhead
-- debuggability and observability
-- community maturity and licensing
-- fit as-is vs. adaptation needed
+The safety floor works: in S1 the model under-rated a fall with low oxygen as "high" and the guardrail kept it critical. The model itself answered "high" in all 25 calls, so with this model the reasoning tier over-escalates (S3, S4) more than it discriminates. See [TrackA/README.md](TrackA/README.md) for the full discussion.
 
 ---
 
@@ -277,23 +274,22 @@ The main retrieval benchmark and comparison are in [TrackB/README.md](TrackB/REA
 
 ### Vector-store benchmark results
 
-The measured benchmark results are in [TrackB/docs/results.csv](TrackB/docs/results.csv):
+FAISS and Chroma are measured in-process; Qdrant is the Docker server, over gRPC. Median query latency from [TrackB/docs/results.csv](TrackB/docs/results.csv) (the full table, including REST and P95, is in [TrackB/README.md](TrackB/README.md)):
 
-| Store | Documents | Index time (s) | Avg latency (ms) |
-| --- | ---: | ---: | ---: |
-| Chroma | 6 | 0.120899 | 1.920 |
-| FAISS | 6 | 0.000084 | 0.069 |
-| Qdrant | 6 | 0.012289 | 0.828 |
-| Chroma | 100 | 0.154131 | 2.439 |
-| FAISS | 100 | 0.000133 | 0.066 |
-| Qdrant | 100 | 0.036456 | 1.148 |
-| Chroma | 1000 | 0.413993 | 1.978 |
-| FAISS | 1000 | 0.000578 | 0.203 |
-| Qdrant | 1000 | 0.263583 | 3.485 |
+| Corpus | Workload | FAISS flat (ms) | Chroma (ms) | Qdrant gRPC (ms) |
+| ---: | --- | ---: | ---: | ---: |
+| 1,000 | unfiltered | 0.52 | 1.05 | 2.59 |
+| 1,000 | `patient_id` filter | 0.05 | 1.95 | 2.69 |
+| 10,000 | unfiltered | 5.18 | 1.77 | 2.93 |
+| 10,000 | `patient_id` filter | 0.13 | 13.13 | 2.48 |
+| 50,000 | unfiltered | 3.50 | 1.62 | 5.28 |
+| 50,000 | `patient_id` filter | 0.26 | 61.46 | 2.57 |
+
+Without a filter, 93-97% of the documents returned for a patient query belong to a different patient, in every store; with the filter, leakage is 0 and the patient's documents are always returned.
 
 ### Why Qdrant is chosen for the real-world implementation
 
-Even though FAISS is the fastest in a raw local benchmark, Qdrant is selected as the production fit because it provides:
+FAISS is the fastest when the application maintains its own patient-to-rows map, but Qdrant is selected as the production fit because its filtered latency stays flat as the corpus grows and it provides:
 
 - native payload filtering by patient and metadata fields
 - service-based deployment with persistence
@@ -306,44 +302,30 @@ The actual service is implemented in [TrackB/retrieval_service.py](TrackB/retrie
 
 ---
 
-## RAGAS vs DeepEval: practical quality comparison
+## RAGAS vs DeepEval
 
-The project also evaluates retrieval quality with two frameworks, RAGAS and DeepEval, using the same patient queries and same local model judge. The actual results are in [TrackB/evaluation/results_eval_frameworks.csv](TrackB/evaluation/results_eval_frameworks.csv).
+Both frameworks scored the same seven question/context/answer cases with the same local judge (`qwen2.5:3b` through Ollama), one metric at a time. All 7 cases produced a valid score for every metric in both frameworks.
 
-### Actual scores
+| Metric | RAGAS 0.4.3 | DeepEval 4.2.8 | RAGAS time (s) | DeepEval time (s) |
+| --- | ---: | ---: | ---: | ---: |
+| Faithfulness | 0.93 | 0.54 | 49.0 | 61.6 |
+| Answer relevancy | 0.61 | 0.74 | 14.7 | 42.6 |
+| Context precision | 0.88 | 1.00 | 52.1 | 28.4 |
+| Context recall | 0.86 | 0.67 | 24.4 | 24.1 |
+| **Total** | | | **140.2** | **156.7** |
 
-| Framework | Metric | Score |
-| --- | --- | ---: |
-| RAGAS | faithfulness | 0.5400 |
-| DeepEval | faithfulness | 0.5357 |
-| RAGAS | answer_relevancy | 0.5800 |
-| DeepEval | answer_relevancy | 0.5762 |
-| RAGAS | context_precision | 0.8300 |
-| DeepEval | contextual_precision | 0.8333 |
-| RAGAS | context_recall | 0.2900 |
-| DeepEval | contextual_recall | 0.2857 |
+What this run supports:
 
-### Interpretation
+- **The two frameworks do not agree.** With identical inputs and the same judge, the per-metric averages differ by 0.12 to 0.39. The frameworks ask the judge different questions (different prompts and claim-extraction steps), and a 3B-parameter judge answers them inconsistently.
+- **The scores are not stable enough to rank anything.** Between two consecutive runs of this script, the faithfulness score of the first case moved from 0.0 to 0.5 in RAGAS and from 1.0 to 0.0 in DeepEval. With seven cases, one flipped case moves an average by 0.14.
+- **Neither framework is meaningfully faster.** Total time was 140 s for RAGAS and 157 s for DeepEval; both are dominated by local judge calls.
+- The same model generates the answers and judges them, and the references are keyword phrases rather than full answers, so the reference-based metrics are approximate.
 
-There is no meaningful result gap between RAGAS and DeepEval for this project. The score differences are tiny:
+Conclusion: this experiment does not justify choosing one framework over the other. Either can be driven by a local judge; a trustworthy quality number needs a larger labelled query set and a stronger, independent judge model. Retrieval quality is therefore reported with the label-based metrics of the vector-store benchmark (Recall@3, cross-patient leakage), which need no judge model.
 
-- faithfulness: 0.0043 difference
-- answer relevancy: 0.0038 difference
-- context precision: 0.0033 difference
-- context recall: 0.0043 difference
+Earlier versions of this repository reported near-identical RAGAS and DeepEval scores and a 10x speed advantage for RAGAS. Those RAGAS figures were not measured (the RAGAS run had returned no scores) and have been removed; the table above replaces them. Per-case scores are in [TrackB/evaluation/results_eval_cases.csv](TrackB/evaluation/results_eval_cases.csv).
 
-This shows that the choice between them is less about score quality and more about operational practicality.
-
-### Install effort and runtime tradeoff
-
-Both frameworks are relatively easy to install in a Python environment, but the runtime difference is meaningful:
-
-| Framework | Total eval time |
-| --- | ---: |
-| RAGAS | ~10.18 s |
-| DeepEval | ~98.59 s |
-
-DeepEval produces almost the same scores but takes about 10x longer for the same evaluation workload. That makes RAGAS the more practical choice for repeated local evaluation and iteration.
+Summary rows: [TrackB/evaluation/results_eval_frameworks.csv](TrackB/evaluation/results_eval_frameworks.csv).
 
 ---
 
@@ -355,6 +337,8 @@ The project includes the generated figures from the vector-store benchmark, all 
 - [fig2_index_time_vs_corpus_size.png](TrackB/docs/figures/fig2_index_time_vs_corpus_size.png)
 - [fig3_percentile_comparison.png](TrackB/docs/figures/fig3_percentile_comparison.png)
 - [fig4_latency_distribution_boxplot.png](TrackB/docs/figures/fig4_latency_distribution_boxplot.png)
+- [fig5_filtered_latency_vs_corpus_size.png](TrackB/docs/figures/fig5_filtered_latency_vs_corpus_size.png)
+- [fig6_retrieval_quality.png](TrackB/docs/figures/fig6_retrieval_quality.png)
 
 Related benchmark appendix:
 
@@ -370,7 +354,7 @@ Related benchmark appendix:
 
 - Track A framework comparison: around 1–2 hours to establish the setup and run benchmarks
 - Track B retrieval environment: around 1–3 hours depending on whether the developer needs to install vector DB tooling and local evaluation dependencies
-- RAGAS vs DeepEval: effectively similar setup cost, but RAGAS is faster to iterate with
+- RAGAS vs DeepEval: similar setup cost and similar run time (about 2.5 minutes each for seven cases with a local judge)
 
 ### Runs on target env. (edge HW / cluster)
 
@@ -387,11 +371,13 @@ Qdrant is the best fit for both a modest local deployment and a future cluster-s
 
 The project produces the following metrics:
 
-- retrieval latency by store and corpus size
+- retrieval latency by store and corpus size, with and without a `patient_id` filter
+- Recall@3 and cross-patient leakage on labelled queries
 - indexing time
 - p50 / p95 / p99 / max latency
-- evaluation quality metrics from RAGAS and DeepEval
+- judge-based quality scores from RAGAS and DeepEval
 - framework overhead comparison for Track A orchestration options
+- rule-table versus real-model severity for each scenario
 - patient-event and network-request results from the scenario replay
 
 ### Maps to project needs
@@ -401,7 +387,7 @@ The project produces the following metrics:
 | Fast alarm processing | Tier 1 + deterministic rules | Lowest latency and highest explainability |
 | Ambiguous patient state interpretation | LangGraph + retrieval + LLM | Good state flow and low orchestration overhead |
 | Patient-scoped retrieval | Qdrant | Native metadata filtering and proper service model |
-| Reproducible evaluation | RAGAS | Similar quality to DeepEval, much faster |
+| Reproducible evaluation | Label-based Recall@3 and leakage | Needs no judge model; RAGAS and DeepEval disagreed with a small local judge |
 | Safe deployment behavior | Guardrails and rule-table floor | Prevents unsafe downgrade of risk severity |
 
 ### Fit as-is / needs adaptation
@@ -430,7 +416,7 @@ python docs\kafka\Create_topics.py
 ### Run Tier 1
 
 ```powershell
-python tiers\tier1_agent.py
+python -m tiers.tier1_agent
 ```
 
 ### Run Tier 2
@@ -472,13 +458,14 @@ This repository is best understood as a two-track system:
 - Track A chooses a reasoning architecture that is explicit, low-overhead, and safe.
 - Track B chooses a retrieval backend that is operationally strong rather than merely the fastest in a microbenchmark.
 
-The evidence points to the following decisions:
+The evidence supports the following decisions:
 
-- LangGraph is the preferred orchestration framework for Tier 2.
-- Qdrant is the preferred retrieval backend for the real-world implementation.
-- RAGAS is the more practical evaluation framework in this project, because it produces nearly identical quality scores to DeepEval while being substantially faster.
+- LangGraph is the orchestration framework for Tier 2. Its overhead (about 7 ms) is negligible; so is AutoGen's and the native pipeline's, and CrewAI's is not.
+- The deterministic guardrail is what makes the reasoning tier safe: with the tested local model it prevented an under-rated critical case, while the model itself over-escalated.
+- Qdrant is the retrieval backend, because patient-scoped retrieval requires a filter and Qdrant's filtered latency stays flat as the corpus grows.
+- The RAGAS/DeepEval comparison is inconclusive with a small local judge and seven cases; retrieval quality is tracked with label-based metrics instead.
 
-The end result is a system that is safer, easier to explain, and better aligned with real-world healthcare-monitoring needs than a purely fast but operationally weak architecture.
+What is not yet shown: that the chosen local model adds useful discrimination, that the results hold beyond one machine and a synthetic corpus, and how long an event takes end to end through the live Kafka broker (the full stack has been run as a smoke check only).
 
 For the detailed Track A and Track B breakdowns, see:
 
