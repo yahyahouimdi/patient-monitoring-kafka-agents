@@ -1,7 +1,8 @@
 """
 eval_framework_benchmark.py
 
-RAGAS benchmark against THIS project's real data.
+RAGAS vs DeepEval on THIS project's real data, with the same cases and the
+same local judge.
 
 Data sources:
     retrieval/loader.py
@@ -11,55 +12,46 @@ Data sources:
 
 Pipeline:
     1. Load the project's real documents and test queries.
-    2. Retrieve top-K documents using all-MiniLM-L6-v2.
+    2. Retrieve top-K documents using all-MiniLM-L6-v2 (in-memory cosine
+       search; this evaluates the embedding retrieval, not the Qdrant
+       service or its patient filter).
     3. Generate an answer using qwen2.5:3b through Ollama.
-    4. Evaluate the generated RAG answers with RAGAS.
-    5. Save one CSV row per metric.
+    4. Score the same cases with RAGAS and with DeepEval, one metric at a
+       time, timing each metric.
+    5. Write results_eval_frameworks.csv (one row per framework x metric)
+       and results_eval_cases.csv (one row per framework x metric x case).
+
+Reporting rule:
+    A case the judge model cannot score is reported as failed
+    (valid_cases < case_count). Scores are averaged over valid cases only
+    and are never filled in from another framework or by hand.
 
 The entire evaluation is local:
     - Embeddings: sentence-transformers
     - Answer generation: Ollama / qwen2.5:3b
-    - RAGAS judge: Ollama / qwen2.5:3b
+    - Judge (both frameworks): Ollama / qwen2.5:3b
 
 No OpenAI API key is required.
 
-IMPORTANT:
-    RAGAS 0.4.x uses the newer llm_factory() API.
-    Do not use the old LangchainLLMWrapper /
-    LangchainEmbeddingsWrapper integration here.
-
-Known limitation:
-    test_queries.json "expected" is a list of keywords/phrases rather
-    than a complete reference answer. We join those phrases into one
-    reference string for reference-based metrics. Therefore:
-        - context_precision
-        - context_recall
-
-    should be treated as approximate indicators rather than authoritative
-    ground-truth measurements.
-
-Another limitation:
-    qwen2.5:3b is used both to generate the answer and to judge it.
-    This is useful for a fully self-hosted experiment but is weaker than
-    using an independent, larger judge model.
+Known limitations:
+    - test_queries.json "expected" is a list of keywords/phrases rather
+      than a complete reference answer. The phrases are joined into one
+      reference string, so the reference-based metrics (context precision
+      and recall) are approximate indicators.
+    - qwen2.5:3b both generates the answer and judges it. That keeps the
+      experiment self-hosted but is weaker than an independent, larger
+      judge.
+    - Seven cases: the scores are a smoke-level comparison, not a
+      statistically meaningful ranking of the two frameworks.
 
 Windows:
     WindowsSelectorEventLoopPolicy is configured before RAGAS is imported
     to avoid asyncio timeout/event-loop problems.
 
-Usage:
+Usage (Ollama running, model pulled):
 
-    Make sure Ollama is running:
-
-        ollama serve
-
-    Make sure the model exists:
-
-        ollama pull qwen2.5:3b
-
-    Then:
-
-        python eval_framework_benchmark.py
+    python TrackB/evaluation/eval_framework_benchmark.py
+    python TrackB/evaluation/eval_framework_benchmark.py --frameworks deepeval
 """
 
 # ============================================================================
@@ -72,8 +64,6 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-
-from sklearn import metrics
 
 
 # ============================================================================
@@ -138,6 +128,10 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 TOP_K = 3
 
 RESULTS_PATH = BASE / "results_eval_frameworks.csv"
+CASE_RESULTS_PATH = BASE / "results_eval_cases.csv"
+
+# Upper bound for one judge request / one RAGAS job, in seconds.
+METRIC_CASE_TIMEOUT_S = 180
 
 
 # ============================================================================
@@ -359,7 +353,7 @@ def build_eval_cases():
 
 def run_ragas(cases):
     """
-    Evaluate all four RAGAS metrics.
+    Evaluate all four RAGAS metrics. Returns (summary_rows, case_rows).
 
     Compatible with the current RAGAS 0.4.3 environment.
 
@@ -381,7 +375,6 @@ def run_ragas(cases):
 
     from ragas import evaluate
     from ragas.llms import llm_factory
-    from ragas.embeddings import HuggingFaceEmbeddings
 
     # IMPORTANT:
     # These are the legacy metric objects expected by ragas.evaluate()
@@ -430,19 +423,34 @@ def run_ragas(cases):
     # Build RAGAS embeddings
     # ------------------------------------------------------------------------
     #
-    # IMPORTANT:
-    # Do NOT use OllamaEmbeddings here.
-    #
-    # RAGAS 0.4.3 Collections/modern embedding validation rejects the
-    # LangChain OllamaEmbeddings object.
-    #
-    # The legacy AnswerRelevancy metric can use this RAGAS-native
-    # HuggingFace embedding implementation.
+    # The legacy AnswerRelevancy metric calls the LangChain-style
+    # embed_query / embed_documents interface. RAGAS 0.4.3's own
+    # HuggingFaceEmbeddings class does not provide it (every case failed
+    # with AttributeError: no attribute 'embed_query'), so the same
+    # sentence-transformers model is exposed through that interface here.
     # ------------------------------------------------------------------------
 
-    ragas_embeddings = HuggingFaceEmbeddings(
-        model="sentence-transformers/all-MiniLM-L6-v2"
-    )
+    from ragas.embeddings import BaseRagasEmbeddings
+    from sentence_transformers import SentenceTransformer
+
+    class SentenceTransformerEmbeddings(BaseRagasEmbeddings):
+        def __init__(self, model_name):
+            super().__init__()
+            self._model = SentenceTransformer(model_name)
+
+        def embed_query(self, text):
+            return self._model.encode([text], normalize_embeddings=True)[0].tolist()
+
+        def embed_documents(self, texts):
+            return self._model.encode(list(texts), normalize_embeddings=True).tolist()
+
+        async def aembed_query(self, text):
+            return self.embed_query(text)
+
+        async def aembed_documents(self, texts):
+            return self.embed_documents(texts)
+
+    ragas_embeddings = SentenceTransformerEmbeddings(EMBEDDING_MODEL)
 
     # ------------------------------------------------------------------------
     # Configure legacy RAGAS metrics
@@ -507,167 +515,197 @@ def run_ragas(cases):
     # ------------------------------------------------------------------------
 
     metric_specs = [
-        (
-            "faithfulness",
-            faithfulness,
-            False,
-        ),
-        (
-            "answer_relevancy",
-            answer_relevancy,
-            False,
-        ),
-        (
-            "context_precision",
-            context_precision,
-            True,
-        ),
-        (
-            "context_recall",
-            context_recall,
-            True,
-        ),
-    ]
-
-    metrics = [
-        metric
-        for _, metric, _ in metric_specs
+        ("faithfulness", faithfulness, False),
+        ("answer_relevancy", answer_relevancy, False),
+        ("context_precision", context_precision, True),
+        ("context_recall", context_recall, True),
     ]
 
     # ------------------------------------------------------------------------
-    # Diagnostic information
+    # Evaluate, one metric at a time
+    # ------------------------------------------------------------------------
+    #
+    # Each metric gets its own evaluate() call so that its wall-clock time
+    # is its own (DeepEval is timed the same way below).
+    #
+    # raise_exceptions=False: a case the judge cannot score comes back as
+    # NaN. NaN cases are COUNTED and reported (valid_cases), never replaced
+    # and never averaged over. A metric with zero valid cases is recorded
+    # with an empty score.
     # ------------------------------------------------------------------------
 
-    print("\nDEBUG METRICS:")
+    from ragas.run_config import RunConfig
 
-    for name, metric, needs_reference in metric_specs:
-        print(
-            f"  {name}: "
-            f"{type(metric)} | "
-            f"reference={needs_reference}"
-        )
-
-    # ------------------------------------------------------------------------
-    # Evaluate
-    # ------------------------------------------------------------------------
-
-    print("\nRunning RAGAS evaluation...")
-    print(
-        f"This uses {OLLAMA_MODEL} as the judge."
-    )
-    print(
-        "Ollama must remain running during evaluation.\n"
-    )
-
-    start = time.perf_counter()
-
-    result = evaluate(
-        dataset,
-        metrics=metrics,
-
-        # Serial execution is intentional.
-        #
-        # We are using one local Ollama/Qwen instance.
-        # This avoids sending multiple simultaneous requests
-        # to the local judge and makes the benchmark more reproducible.
-        run_config=__import__(
-            "ragas.run_config",
-            fromlist=["RunConfig"],
-        ).RunConfig(
-            max_workers=1,
-        ),
-
-        # Raise the actual metric exception instead of silently
-        # converting failures into NaN values.
-        raise_exceptions=True,
-    )
-
-    elapsed = time.perf_counter() - start
-
-    # ------------------------------------------------------------------------
-    # Convert result to DataFrame
-    # ------------------------------------------------------------------------
-
-    df = result.to_pandas()
-
-    print("\nRaw RAGAS result:")
-    print(df)
-
-    # ------------------------------------------------------------------------
-    # Calculate final rows
-    # ------------------------------------------------------------------------
+    print(f"\nRunning RAGAS evaluation with {OLLAMA_MODEL} as the judge...\n")
 
     rows = []
+    case_rows = []
 
-    for name, _, needs_ref in metric_specs:
-
-        if name not in df.columns:
-            raise RuntimeError(
-                f"RAGAS did not return metric column: {name}. "
-                f"Available columns: {list(df.columns)}"
-            )
-
-        values = df[name].dropna()
-
-        if len(values) == 0:
-            raise RuntimeError(
-                f"RAGAS returned no valid values for metric "
-                f"{name!r}. The metric produced only NaN values."
-            )
-
-        score = float(values.mean())
-
-        rows.append(
-            {
-                "framework": "RAGAS",
-                "metric": name,
-                "requires_reference": needs_ref,
-                "score": round(score, 4),
-                "case_count": len(cases),
-                "eval_time_s": round(elapsed, 4),
-                "judge_model": OLLAMA_MODEL,
-                "recorded_at": now(),
-            }
+    for name, metric, needs_ref in metric_specs:
+        start = time.perf_counter()
+        result = evaluate(
+            dataset,
+            metrics=[metric],
+            # Serial execution: one local Ollama instance, one request at a time.
+            run_config=RunConfig(max_workers=1, timeout=METRIC_CASE_TIMEOUT_S),
+            raise_exceptions=False,
         )
+        elapsed = time.perf_counter() - start
 
-    return rows
+        df = result.to_pandas()
+        values = [
+            None if value is None or np.isnan(value) else float(value)
+            for value in (df[name].tolist() if name in df.columns else [None] * len(cases))
+        ]
+        rows.append(_summary_row("RAGAS", name, needs_ref, values, elapsed))
+        case_rows.extend(_case_rows("RAGAS", name, cases, values))
+        print(f"  RAGAS {name}: {values} ({elapsed:.1f}s)")
+
+    return rows, case_rows
 
 
 # ============================================================================
-# CSV output
+# DeepEval
 # ============================================================================
 
-def append_rows(rows):
-    """
-    Append evaluation results to results_eval_frameworks.csv.
-    """
+class OllamaJudge:
+    """Minimal DeepEvalBaseLLM-compatible wrapper around a local Ollama
+    model (DeepEval's documented pattern for a non-OpenAI judge)."""
 
-    file_exists = RESULTS_PATH.exists()
+    def __init__(self, model_name=OLLAMA_MODEL, base_url=OLLAMA_BASE_URL):
+        self.model_name = model_name
+        self.base_url = base_url
 
-    with open(
-        RESULTS_PATH,
-        "a",
-        newline="",
-        encoding="utf-8",
-    ) as f:
+    def load_model(self):
+        return self.model_name
 
-        writer = csv.DictWriter(
-            f,
-            fieldnames=[
-                "framework",
-                "metric",
-                "requires_reference",
-                "score",
-                "case_count",
-                "eval_time_s",
-                "judge_model",
-                "recorded_at",
-            ],
+    def generate(self, prompt: str) -> str:
+        resp = requests.post(
+            f"{self.base_url}/api/generate",
+            json={
+                "model": self.model_name,
+                "prompt": prompt,
+                "stream": False,
+                # Constrain decoding to valid JSON: small models fail
+                # free-form "output JSON" instructions far more often.
+                "format": "json",
+                "options": {"temperature": 0},
+            },
+            timeout=METRIC_CASE_TIMEOUT_S,
         )
+        resp.raise_for_status()
+        return resp.json()["response"]
 
-        if not file_exists:
-            writer.writeheader()
+    async def a_generate(self, prompt: str) -> str:
+        return self.generate(prompt)
 
+    def get_model_name(self):
+        return f"ollama/{self.model_name}"
+
+
+def run_deepeval(cases):
+    """
+    Evaluate the same four metrics with DeepEval, same cases, same judge.
+
+    Each case is measured on its own so that one unparseable judge answer
+    costs one case, not the whole metric. Failed cases are counted and
+    reported (valid_cases), exactly like the RAGAS NaN cases.
+    """
+
+    from deepeval.metrics import (
+        AnswerRelevancyMetric,
+        ContextualPrecisionMetric,
+        ContextualRecallMetric,
+        FaithfulnessMetric,
+    )
+    from deepeval.models.base_model import DeepEvalBaseLLM
+    from deepeval.test_case import LLMTestCase
+
+    import deepeval
+
+    print(f"\nDeepEval version: {deepeval.__version__}")
+
+    JudgeModel = type("JudgeModel", (OllamaJudge, DeepEvalBaseLLM), {})
+    judge = JudgeModel()
+
+    test_cases = [
+        LLMTestCase(
+            input=case["question"],
+            actual_output=case["answer"],
+            retrieval_context=case["contexts"],
+            expected_output=case["ground_truth"],
+        )
+        for case in cases
+    ]
+
+    metric_specs = [
+        ("faithfulness", FaithfulnessMetric, False),
+        ("answer_relevancy", AnswerRelevancyMetric, False),
+        ("contextual_precision", ContextualPrecisionMetric, True),
+        ("contextual_recall", ContextualRecallMetric, True),
+    ]
+
+    rows = []
+    case_rows = []
+
+    for name, metric_class, needs_ref in metric_specs:
+        start = time.perf_counter()
+        values = []
+        for test_case in test_cases:
+            metric = metric_class(model=judge, async_mode=False, include_reason=False)
+            try:
+                metric.measure(test_case, _show_indicator=False)
+                values.append(None if metric.score is None else float(metric.score))
+            except Exception as exc:  # judge output the metric could not parse
+                print(f"    DeepEval {name} case failed: {type(exc).__name__}: {str(exc)[:120]}")
+                values.append(None)
+        elapsed = time.perf_counter() - start
+
+        rows.append(_summary_row("DeepEval", name, needs_ref, values, elapsed))
+        case_rows.extend(_case_rows("DeepEval", name, cases, values))
+        print(f"  DeepEval {name}: {values} ({elapsed:.1f}s)")
+
+    return rows, case_rows
+
+
+# ============================================================================
+# Result rows
+# ============================================================================
+
+def _summary_row(framework, metric, needs_ref, values, elapsed):
+    valid = [value for value in values if value is not None]
+    return {
+        "framework": framework,
+        "metric": metric,
+        "requires_reference": needs_ref,
+        "score": round(sum(valid) / len(valid), 4) if valid else "",
+        "valid_cases": len(valid),
+        "case_count": len(values),
+        "eval_time_s": round(elapsed, 2),
+        "judge_model": OLLAMA_MODEL,
+        "recorded_at": now(),
+    }
+
+
+def _case_rows(framework, metric, cases, values):
+    return [
+        {
+            "framework": framework,
+            "metric": metric,
+            "case": index + 1,
+            "question": case["question"],
+            "score": "" if value is None else round(value, 4),
+        }
+        for index, (case, value) in enumerate(zip(cases, values))
+    ]
+
+
+def write_csv(path, rows):
+    """Overwrite: one run is one results file, so rows from different runs
+    (or different judge set-ups) can never be mixed."""
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+        writer.writeheader()
         writer.writerows(rows)
 
 
@@ -681,172 +719,97 @@ def check_ollama():
     """
 
     try:
-
-        response = requests.get(
-            f"{OLLAMA_BASE_URL}/api/tags",
-            timeout=5,
-        )
-
+        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
         response.raise_for_status()
-
-        models = [
-            model["name"]
-            for model in response.json().get(
-                "models",
-                [],
-            )
-        ]
-
-        matching_models = [
-            model
-            for model in models
-            if model.startswith(OLLAMA_MODEL)
-        ]
-
-        if not matching_models:
-
-            print(
-                f"\nWARNING: {OLLAMA_MODEL} "
-                "was not found in Ollama."
-            )
-
-            print(
-                f"Run:\n    ollama pull {OLLAMA_MODEL}\n"
-            )
-
-            return False
-
-        print(
-            f"Ollama OK: {matching_models[0]}"
-        )
-
-        return True
-
     except requests.exceptions.RequestException as exc:
-
-        print(
-            f"\nERROR: Could not reach Ollama at "
-            f"{OLLAMA_BASE_URL}"
-        )
-
-        print(
-            "Make sure Ollama is running:"
-        )
-
-        print(
-            "    ollama serve"
-        )
-
-        print(
-            f"\nDetails: {exc}"
-        )
-
+        print(f"\nERROR: Could not reach Ollama at {OLLAMA_BASE_URL}")
+        print("Make sure Ollama is running:\n    ollama serve")
+        print(f"\nDetails: {exc}")
         return False
+
+    models = [model["name"] for model in response.json().get("models", [])]
+    matching_models = [model for model in models if model.startswith(OLLAMA_MODEL)]
+    if not matching_models:
+        print(f"\nWARNING: {OLLAMA_MODEL} was not found in Ollama.")
+        print(f"Run:\n    ollama pull {OLLAMA_MODEL}\n")
+        return False
+
+    print(f"Ollama OK: {matching_models[0]}")
+    return True
 
 
 # ============================================================================
 # Main
 # ============================================================================
 
+RUNNERS = {
+    "ragas": ("RAGAS", run_ragas),
+    "deepeval": ("DeepEval", run_deepeval),
+}
+
+
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="RAGAS vs DeepEval on the project's knowledge base.")
+    parser.add_argument("--frameworks", nargs="+", default=list(RUNNERS), choices=list(RUNNERS))
+    args = parser.parse_args()
 
     print("=" * 70)
-    print("TrackB RAGAS Evaluation Benchmark")
+    print("TrackB evaluation-framework benchmark: RAGAS vs DeepEval")
     print("=" * 70)
-
-    # ------------------------------------------------------------------------
-    # Ollama
-    # ------------------------------------------------------------------------
 
     if not check_ollama():
-        raise SystemExit(
-            "\nOllama is unavailable. "
-            "Start Ollama and make sure the model exists."
-        )
+        raise SystemExit("\nOllama is unavailable. Start Ollama and make sure the model exists.")
 
-    # ------------------------------------------------------------------------
-    # Build cases
-    # ------------------------------------------------------------------------
-
-    print(
-        "\nBuilding retrieval + generation cases "
-        "from the project's real knowledge base..."
-    )
-
+    print("\nBuilding retrieval + generation cases from the project's real knowledge base...")
     cases = build_eval_cases()
-
     if not cases:
-
-        print(
-            "\nNo usable cases."
-        )
-
-        print(
-            "All queries may have empty 'expected' fields."
-        )
-
+        print("\nNo usable cases. All queries may have empty 'expected' fields.")
         return
 
-    # ------------------------------------------------------------------------
-    # RAGAS
-    # ------------------------------------------------------------------------
+    summary_rows = []
+    case_rows = []
 
-    print("\n" + "=" * 70)
-    print("Running RAGAS")
-    print("=" * 70)
+    for key in args.frameworks:
+        label, runner = RUNNERS[key]
+        print("\n" + "=" * 70)
+        print(f"Running {label}")
+        print("=" * 70)
+        try:
+            rows, per_case = runner(cases)
+        except Exception as exc:
+            # A framework that cannot run at all is a result too: record it
+            # as zero valid cases instead of leaving a gap someone might
+            # later fill in by hand.
+            print(f"\n{label} could not run: {type(exc).__name__}: {exc}")
+            rows = [{
+                "framework": label,
+                "metric": f"(framework failed: {type(exc).__name__})",
+                "requires_reference": "",
+                "score": "",
+                "valid_cases": 0,
+                "case_count": len(cases),
+                "eval_time_s": "",
+                "judge_model": OLLAMA_MODEL,
+                "recorded_at": now(),
+            }]
+            per_case = []
+        summary_rows.extend(rows)
+        case_rows.extend(per_case)
 
-    try:
+    write_csv(RESULTS_PATH, summary_rows)
+    if case_rows:
+        write_csv(CASE_RESULTS_PATH, case_rows)
 
-        rows = run_ragas(cases)
-
-    except Exception as exc:
-
+    print(f"\nRecorded {len(summary_rows)} rows to:\n    {RESULTS_PATH}")
+    print("\nResults:")
+    for row in summary_rows:
+        score = f"{row['score']:.4f}" if row["score"] != "" else "  n/a "
+        elapsed = f"{row['eval_time_s']:.1f}s" if row["eval_time_s"] != "" else "n/a"
         print(
-            "\nRAGAS evaluation FAILED."
-        )
-
-        print(
-            f"Error type: {type(exc).__name__}"
-        )
-
-        print(
-            f"Error: {exc}"
-        )
-
-        raise
-
-    # ------------------------------------------------------------------------
-    # Save results
-    # ------------------------------------------------------------------------
-
-    if rows:
-
-        append_rows(rows)
-
-        print(
-            f"\nRecorded {len(rows)} rows to:"
-        )
-
-        print(
-            f"    {RESULTS_PATH}"
-        )
-
-        print("\nResults:")
-
-        for row in rows:
-
-            print(
-                f"  {row['framework']:8s} "
-                f"{row['metric']:22s} "
-                f"ref={str(row['requires_reference']):5s} "
-                f"score={row['score']:.4f} "
-                f"time={row['eval_time_s']:.2f}s"
-            )
-
-    else:
-
-        print(
-            "\nNo results were recorded."
+            f"  {row['framework']:8s} {row['metric']:22s} score={score} "
+            f"valid={row['valid_cases']}/{row['case_count']} time={elapsed}"
         )
 
 

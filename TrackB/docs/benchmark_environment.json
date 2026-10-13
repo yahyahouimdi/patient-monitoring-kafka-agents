@@ -1,0 +1,26 @@
+{
+  "recorded_at": "2026-10-13T07:19:04.574413+00:00",
+  "git_commit_at_run": "e98bb26124bce02efe62a84a0b45ccfdcd1f17db",
+  "platform": "Windows-11-10.0.26300-SP0",
+  "processor": "Intel64 Family 6 Model 154 Stepping 3, GenuineIntel",
+  "logical_cpus": 16,
+  "python": "3.12.10",
+  "packages": {
+    "faiss-cpu": "1.15.0",
+    "chromadb": "1.1.1",
+    "qdrant-client": "1.19.0",
+    "sentence-transformers": "5.7.0",
+    "numpy": "2.5.2"
+  },
+  "qdrant_server_version": "1.18.3",
+  "embedding_model": "all-MiniLM-L6-v2",
+  "top_k": 3,
+  "target_samples_per_mode": 300,
+  "warmup_queries": 10,
+  "corpus_sizes": [
+    100,
+    1000,
+    10000,
+    50000
+  ]
+}

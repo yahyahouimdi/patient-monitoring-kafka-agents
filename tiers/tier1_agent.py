@@ -2,21 +2,34 @@
 tier1_agent.py
 
 Tier 1 - fast, deterministic, rule-based safety layer.
-No AI calls. Reads wearable-vitals + device-connectivity, applies fixed
-thresholds, and publishes an alarm the moment a reading crosses a line.
+No AI calls. Reads wearable-vitals + device-connectivity, applies the shared
+rule table, and publishes an alarm the moment a reading crosses a line.
 Never waits on Tier 2.
 
-Usage:
-    pip install kafka-python --break-system-packages
-    python tier1_agent.py
+Usage (from the repository root):
+    python -m tiers.tier1_agent
 """
 
 import json
+import os
+import sys
+import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from kafka import KafkaConsumer, KafkaProducer
 
-BOOTSTRAP_SERVERS = "localhost:9092"
+# Allow `python tiers/tier1_agent.py` as well as `python -m tiers.tier1_agent`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from TrackA.shared import rules  # noqa: E402
+from TrackA.shared.schemas import PatientState  # noqa: E402
+
+BOOTSTRAP_SERVERS = os.environ.get("BOOTSTRAP_SERVERS", "localhost:9092")
+
+# While a condition persists at the same severity, repeat its alarm at most
+# this often. A new or more severe condition is never held back.
+ALARM_REPEAT_S = float(os.environ.get("ALARM_REPEAT_S", "30"))
 
 # Last known connectivity state per device_id (True/False).
 # Unknown devices default to "connected" so a reading isn't blocked
@@ -34,27 +47,65 @@ def is_connected(device_id):
 
 def evaluate(event):
     """
-    Fixed threshold rules -> returns (severity, reason) or (None, None).
-    Severity levels match the guide: critical, high, moderate, normal.
-    Adjust the numbers to your project's actual clinical thresholds.
+    Rule-table decision for one wearable reading -> (severity, reason), or
+    (None, None) when nothing is crossed.
+
+    The thresholds are not defined here: this delegates to
+    TrackA/shared/rules.py (rules.json), the same table the Tier 2 guardrail
+    uses as its floor, so the two tiers cannot drift apart. That table also
+    flags physically impossible values (heart rate 0, SpO2 above 100, ...)
+    as a sensor fault to verify instead of reading them as clinical values.
     """
-    hr = event.get("heart_rate")
-    spo2 = event.get("spo2")
-    temp = event.get("body_temperature")
-    fall = event.get("fall_detection")
+    state = PatientState(
+        patient_id=event.get("patient_id") or "",
+        heart_rate=event.get("heart_rate"),
+        spo2=event.get("spo2"),
+        body_temperature=event.get("body_temperature"),
+        fall_detection=event.get("fall_detection"),
+    )
+    severity, reason = rules.rule_table_severity(state)
+    if severity == "normal":
+        return None, None
+    return severity, reason
 
-    if fall == 1:
-        return "critical", "fall detected"
-    if spo2 is not None and spo2 < 90:
-        return "critical", f"low SpO2 ({spo2}%)"
-    if hr is not None and (hr > 150 or hr < 40):
-        return "high", f"heart rate out of safe range ({hr} bpm)"
-    if hr is not None and (hr > 130 or hr < 50):
-        return "moderate", f"heart rate borderline ({hr} bpm)"
-    if temp is not None and (temp > 39.0 or temp < 35.0):
-        return "moderate", f"body temperature out of range ({temp} C)"
 
-    return None, None
+class AlarmDeduplicator:
+    """Decides whether an alarm is worth publishing again.
+
+    A wearable reports every couple of seconds; without this, one sustained
+    episode produced one alarm per reading (and one Tier 2 model call per
+    alarm). The first alarm of an episode, any escalation, and any change of
+    cause are published immediately. An unchanged condition is repeated
+    every `repeat_s` so a persistent emergency keeps being announced. A
+    normal reading ends the episode.
+    """
+
+    def __init__(self, repeat_s=ALARM_REPEAT_S, clock=time.monotonic):
+        self.repeat_s = repeat_s
+        self.clock = clock
+        self._active = {}  # patient_id -> (severity, reason kind, last publish time)
+
+    @staticmethod
+    def _kind(reason):
+        # "low SpO2 (85%)" and "low SpO2 (84%)" are the same condition.
+        return reason.split("(", 1)[0].strip()
+
+    def should_publish(self, patient_id, severity, reason):
+        if severity is None:
+            self._active.pop(patient_id, None)
+            return False
+
+        current_time = self.clock()
+        kind = self._kind(reason)
+        previous = self._active.get(patient_id)
+        if previous is not None:
+            previous_severity, previous_kind, published_at = previous
+            unchanged = previous_severity == severity and previous_kind == kind
+            if unchanged and current_time - published_at < self.repeat_s:
+                return False
+
+        self._active[patient_id] = (severity, kind, current_time)
+        return True
 
 
 def build_alarm(event, severity, reason):
@@ -72,7 +123,27 @@ def build_alarm(event, severity, reason):
     }
 
 
+def apply_connectivity(event):
+    device_id = event.get("device_id")
+    if device_id is not None:
+        connectivity_state[device_id] = bool(event.get("connected"))
+
+
+def restore_connectivity():
+    """After a restart, recover the last known connectivity of every device
+    from the retained topic instead of assuming everything is connected."""
+    from tiers.kafka_replay import replay_topics
+
+    count = replay_topics(
+        BOOTSTRAP_SERVERS, ["device-connectivity"], lambda topic, event: apply_connectivity(event)
+    )
+    print(f"Tier 1 restored connectivity for {len(connectivity_state)} device(s) "
+          f"from {count} retained event(s).")
+
+
 def main():
+    restore_connectivity()
+
     consumer = KafkaConsumer(
         "wearable-vitals", "device-connectivity",
         bootstrap_servers=BOOTSTRAP_SERVERS,
@@ -85,6 +156,7 @@ def main():
         key_serializer=lambda k: k.encode("utf-8"),
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
     )
+    deduplicator = AlarmDeduplicator()
 
     print("Tier 1 running. Listening on wearable-vitals + device-connectivity...")
 
@@ -92,13 +164,13 @@ def main():
         event = msg.value
 
         if msg.topic == "device-connectivity":
-            connectivity_state[event["device_id"]] = bool(event.get("connected"))
+            apply_connectivity(event)
             continue
 
         # msg.topic == "wearable-vitals"
         severity, reason = evaluate(event)
-        if severity is None:
-            continue  # normal reading, nothing to do
+        if not deduplicator.should_publish(event.get("patient_id"), severity, reason):
+            continue  # normal reading, or an alarm already published for this episode
 
         alarm = build_alarm(event, severity, reason)
         producer.send("alarms", key=alarm["patient_id"], value=alarm)

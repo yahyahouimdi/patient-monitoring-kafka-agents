@@ -9,6 +9,7 @@ same way tier1_agent.py publishes to "alarms".
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import threading
 from .schemas import PatientState, ReasoningResult, NetworkRequest
 from .config import settings
 
@@ -18,6 +19,10 @@ SEVERITY_TO_CONNECTION = {
     "moderate": "shared_good_quality",
     "normal": "none",
 }
+
+
+# Tier 2 reasons on several worker threads; keep request-log lines whole.
+_log_lock = threading.Lock()
 
 
 def now() -> str:
@@ -68,5 +73,5 @@ def _append_request_log(request: NetworkRequest) -> None:
     """Persist an inspectable copy for the read-only Track B service."""
     path = Path(settings.NETWORK_REQUEST_LOG_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
+    with _log_lock, path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(request.__dict__, ensure_ascii=False) + "\n")

@@ -12,7 +12,7 @@ def run_pipeline(patient_id: str, merged_state: dict, producer=None) -> Optional
     if not gate.should_reason_about(state):
         return None
 
-    query = f"patient {state.patient_id} history {state.maladie or ''}"
+    query = retrieval_client.build_query(state)
     retrieved = retrieval_client.search(query, patient_id=state.patient_id)
     narrative = (
         f"HR={state.heart_rate}, SpO2={state.spo2}, Temp={state.body_temperature}C, "

@@ -83,7 +83,18 @@ class SearchRequest(BaseModel):
     query: str = Field(..., description="Natural language query")
     k: int = Field(DEFAULT_K, ge=1, le=20)
     patient_id: Optional[str] = Field(
-        None, description="Restrict results to this patient only (e.g. 'P001')"
+        None,
+        description=(
+            "Scope results to this patient (e.g. 'P001'). Documents of every "
+            "other patient are excluded."
+        ),
+    )
+    include_global: bool = Field(
+        True,
+        description=(
+            "With patient_id: also return general clinical notes, which belong "
+            "to no patient. Set false for the patient's own documents only."
+        ),
     )
 
 
@@ -194,24 +205,44 @@ def search(req: SearchRequest):
 
     # Native payload filtering -- this is the exact capability that
     # justified choosing Qdrant. See Appendix A.3.
+    #
+    # A patient-scoped search never returns another patient's documents.
+    # It does return the general clinical notes (patient_id is null):
+    # they are the medical knowledge Tier 2 reasons with, and a filter
+    # of "this patient only" used to exclude every one of them.
+    patient_match = qmodels.FieldCondition(
+        key="patient_id", match=qmodels.MatchValue(value=req.patient_id or "")
+    )
     query_filter = None
-    if req.patient_id:
-        query_filter = qmodels.Filter(
-            must=[
-                qmodels.FieldCondition(
-                    key="patient_id",
-                    match=qmodels.MatchValue(value=req.patient_id),
-                )
-            ]
-        )
+    if req.patient_id and req.include_global:
+        query_filter = qmodels.Filter(should=[
+            patient_match,
+            qmodels.IsEmptyCondition(is_empty=qmodels.PayloadField(key="patient_id")),
+        ])
+    elif req.patient_id:
+        query_filter = qmodels.Filter(must=[patient_match])
 
-    response = client.query_points(
+    hits = client.query_points(
         collection_name=COLLECTION_NAME,
         query=query_embedding,
         query_filter=query_filter,
         limit=req.k,
-    )
-    hits = response.points
+    ).points
+
+    # General notes can outscore the patient's own documents for a query
+    # about the situation. The patient's best document is always kept, so
+    # the caller never loses the profile it asked about.
+    if req.patient_id and req.include_global and not any(
+        hit.payload.get("patient_id") == req.patient_id for hit in hits
+    ):
+        own = client.query_points(
+            collection_name=COLLECTION_NAME,
+            query=query_embedding,
+            query_filter=qmodels.Filter(must=[patient_match]),
+            limit=1,
+        ).points
+        if own:
+            hits = hits[: req.k - 1] + own
 
     results = [
         SearchResultItem(

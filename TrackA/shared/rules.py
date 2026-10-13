@@ -57,7 +57,7 @@ SEVERITY_ORDER = [
 # Sensor validation
 # ---------------------------------------------------------------------
 
-def _validate_sensor_values(state: PatientState):
+def validate_sensor_values(state: PatientState):
     """
     Returns (severity, reason) if a sensor value is impossible.
     Otherwise returns None.
@@ -67,27 +67,27 @@ def _validate_sensor_values(state: PatientState):
         if state.heart_rate <= 0:
             return (
                 "critical",
-                f"invalid heart-rate value ({state.heart_rate} bpm)",
+                f"implausible heart-rate value ({state.heart_rate} bpm) -- sensor fault or emergency, verify",
             )
 
         if state.heart_rate > 250:
             return (
                 "critical",
-                f"invalid heart-rate value ({state.heart_rate} bpm)",
+                f"implausible heart-rate value ({state.heart_rate} bpm) -- sensor fault or emergency, verify",
             )
 
     if state.spo2 is not None:
         if state.spo2 < 0 or state.spo2 > 100:
             return (
                 "critical",
-                f"invalid SpO₂ value ({state.spo2}%)",
+                f"implausible SpO2 value ({state.spo2}%) -- sensor fault or emergency, verify",
             )
 
     if state.body_temperature is not None:
         if state.body_temperature < 25 or state.body_temperature > 45:
             return (
                 "critical",
-                f"invalid body temperature ({state.body_temperature} °C)",
+                f"implausible body temperature ({state.body_temperature} C) -- sensor fault or emergency, verify",
             )
 
     return None
@@ -109,7 +109,7 @@ def rule_table_severity(state: PatientState) -> Tuple[Severity, str]:
     # Validate sensors
     # --------------------------------------------------------------
 
-    validation = _validate_sensor_values(state)
+    validation = validate_sensor_values(state)
     if validation is not None:
         return validation
 
@@ -128,7 +128,7 @@ def rule_table_severity(state: PatientState) -> Tuple[Severity, str]:
         state.spo2 is not None
         and state.spo2 < SPO2_CRITICAL
     ):
-        return "critical", f"low SpO₂ ({state.spo2}%)"
+        return "critical", f"low SpO2 ({state.spo2}%)"
 
     # --------------------------------------------------------------
     # Heart rate
@@ -167,7 +167,7 @@ def rule_table_severity(state: PatientState) -> Tuple[Severity, str]:
     ):
         return (
             "moderate",
-            f"body temperature out of range ({state.body_temperature:.1f} °C)",
+            f"body temperature out of range ({state.body_temperature:.1f} C)",
         )
 
     return "normal", "no threshold crossed"

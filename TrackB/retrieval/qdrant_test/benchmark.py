@@ -1,128 +1,132 @@
 from __future__ import annotations
 
-import importlib
+import os
 import sys
+import time
 from pathlib import Path
-from time import perf_counter
+from typing import Optional
+
+import numpy as np
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from benchmark_common import (  # noqa: E402
-    BenchmarkResult,
-    EMBEDDING_MODEL_NAME,
-    TOP_K,
-    append_result_row,
-    build_timed_query_plan,
-    encode_texts,
-    elapsed_seconds,
-    format_result_texts,
-    load_documents,
-    load_embedding_model,
-    load_queries,
-    print_report,
-    to_ms,
-)
+from benchmark_common import BenchmarkData, StoreAdapter, run_and_record  # noqa: E402
+
+try:
+    from qdrant_client import QdrantClient
+    from qdrant_client.http import models
+except ImportError as exc:
+    raise SystemExit(
+        "qdrant-client is required to run this benchmark. Install it with `pip install qdrant-client`."
+    ) from exc
+
+QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
+QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
+QDRANT_GRPC_PORT = int(os.getenv("QDRANT_GRPC_PORT", "6334"))
+UPSERT_BATCH = 1000
+INDEX_WAIT_TIMEOUT_S = 600
 
 
-def require_qdrant():
-    try:
-        client_module = importlib.import_module("qdrant_client")
-        models_module = importlib.import_module("qdrant_client.http.models")
-        return client_module.QdrantClient, models_module
-    except ImportError as exc:
-        raise SystemExit(
-            "qdrant-client is required to run this benchmark. Install it with `pip install qdrant-client`."
-        ) from exc
+class QdrantAdapter(StoreAdapter):
+    """The Qdrant server (the Compose service), over gRPC or REST.
 
+    This is deliberately NOT qdrant-client's `:memory:` mode: that mode is a
+    pure-Python stand-in for tests and says nothing about the server the
+    retrieval service actually talks to. Every latency here includes the
+    network round trip to the container, which the in-process stores do
+    not pay. Both transports are measured because they differ by several
+    milliseconds per query on the benchmark machine.
 
-def run_benchmark() -> BenchmarkResult:
-    QdrantClient, models = require_qdrant()
-    documents = load_documents()
-    queries = load_queries()
-    model = load_embedding_model()
+    The patient filter is a native payload filter over a keyword-indexed
+    `patient_id` field.
+    """
 
-    document_texts = [doc["text"] for doc in documents]
-    document_ids = [idx + 1 for idx, _ in enumerate(documents)]
-    document_embeddings = encode_texts(model, document_texts)
-    vector_size = document_embeddings.shape[1]
+    def __init__(self, prefer_grpc: bool) -> None:
+        self.prefer_grpc = prefer_grpc
+        self.name = "Qdrant" if prefer_grpc else "Qdrant-REST"
+        self.deployment = "server (gRPC)" if prefer_grpc else "server (REST)"
 
-    start = perf_counter()
-    client = QdrantClient(location=":memory:")
-    collection_name = "trackb_qdrant_benchmark"
-    if client.collection_exists(collection_name):
-        client.delete_collection(collection_name)
-    client.create_collection(
-        collection_name=collection_name,
-        vectors_config=models.VectorParams(size=vector_size, distance=models.Distance.COSINE),
-    )
-    client.upsert(
-        collection_name=collection_name,
-        points=[
-            models.PointStruct(
-                id=document_id,
-                vector=document_embeddings[index].tolist(),
-                payload={
-                    "text": document_texts[index],
-                    "document_id": documents[index]["id"],
-                },
-            )
-            for index, document_id in enumerate(document_ids)
-        ],
-    )
-    index_creation_s = elapsed_seconds(start)
-
-    # Warm-up: untimed first query so client/collection warm-up cost doesn't
-    # bias the P99 estimate.
-    warmup_embedding = encode_texts(model, [queries[0]["query"]])[0].tolist()
-    client.query_points(collection_name=collection_name, query=warmup_embedding, limit=TOP_K, with_payload=True)
-
-    timed_queries = build_timed_query_plan(queries)
-    query_latencies_ms: list[float] = []
-    query_results: list[dict] = []
-    for position, query_item in enumerate(timed_queries):
-        query_text = query_item["query"]
-        query_embedding = encode_texts(model, [query_text])[0].tolist()
-
-        query_start = perf_counter()
-        response = client.query_points(
-            collection_name=collection_name,
-            query=query_embedding,
-            limit=TOP_K,
-            with_payload=True,
+    def build(self, data: BenchmarkData) -> None:
+        self.client = QdrantClient(
+            host=QDRANT_HOST, port=QDRANT_PORT, grpc_port=QDRANT_GRPC_PORT,
+            prefer_grpc=self.prefer_grpc, timeout=120,
         )
-        latency_ms = to_ms(elapsed_seconds(query_start))
-        query_latencies_ms.append(latency_ms)
+        try:
+            self.client.get_collections()
+        except Exception as exc:
+            raise SystemExit(
+                f"No Qdrant server reachable at {QDRANT_HOST}:{QDRANT_PORT}. Start it with "
+                "`docker compose up -d qdrant` (or set QDRANT_HOST / QDRANT_PORT)."
+            ) from exc
 
-        if position < len(queries):
-            matched_documents = [
-                point.payload["text"]
-                for point in response.points
-                if point.payload and "text" in point.payload
-            ]
-            query_results.append(
-                {
-                    "query": query_text,
-                    "latency_ms": latency_ms,
-                    "results": format_result_texts(matched_documents, TOP_K),
-                }
+        self.collection = f"trackb_benchmark_{len(data.documents)}"
+        if self.client.collection_exists(self.collection):
+            self.client.delete_collection(self.collection)
+        self.client.create_collection(
+            collection_name=self.collection,
+            vectors_config=models.VectorParams(
+                size=data.document_embeddings.shape[1], distance=models.Distance.COSINE
+            ),
+        )
+        self.client.create_payload_index(
+            collection_name=self.collection,
+            field_name="patient_id",
+            field_schema=models.PayloadSchemaType.KEYWORD,
+        )
+        for start in range(0, len(data.documents), UPSERT_BATCH):
+            stop = min(start + UPSERT_BATCH, len(data.documents))
+            self.client.upsert(
+                collection_name=self.collection,
+                wait=True,
+                points=models.Batch(
+                    ids=list(range(start, stop)),
+                    vectors=data.document_embeddings[start:stop].tolist(),
+                    payloads=[{"patient_id": patient_id} for patient_id in data.patient_ids[start:stop]],
+                ),
             )
+        self._wait_until_indexed()
 
-    return BenchmarkResult(
-        store="Qdrant",
-        documents_indexed=len(documents),
-        embedding_model=EMBEDDING_MODEL_NAME,
-        index_creation_s=index_creation_s,
-        query_latencies_ms=query_latencies_ms,
-        query_results=query_results,
-    )
+    def _wait_until_indexed(self) -> None:
+        """Index build is part of index creation time: block until the
+        optimizer has finished (collection status green)."""
+        deadline = time.time() + INDEX_WAIT_TIMEOUT_S
+        while time.time() < deadline:
+            info = self.client.get_collection(self.collection)
+            if info.status == models.CollectionStatus.GREEN:
+                print(
+                    f"[qdrant] {info.points_count} points, "
+                    f"{info.indexed_vectors_count} in the HNSW index",
+                    file=sys.stderr,
+                )
+                return
+            time.sleep(0.25)
+        raise RuntimeError(f"Qdrant collection {self.collection} did not finish indexing")
+
+    def search(self, vector: np.ndarray, k: int, patient_id: Optional[str] = None) -> list[int]:
+        query_filter = None
+        if patient_id is not None:
+            query_filter = models.Filter(must=[
+                models.FieldCondition(key="patient_id", match=models.MatchValue(value=patient_id))
+            ])
+        response = self.client.query_points(
+            collection_name=self.collection,
+            query=vector.tolist(),
+            query_filter=query_filter,
+            limit=k,
+            with_payload=False,
+        )
+        return [int(point.id) for point in response.points]
+
+    def close(self) -> None:
+        self.client.delete_collection(self.collection)
+        self.client.close()
 
 
 def main() -> None:
-    result = run_benchmark()
-    print_report(result)
-    append_result_row(result)
+    run_and_record(QdrantAdapter(prefer_grpc=True))
+    run_and_record(QdrantAdapter(prefer_grpc=False))
 
 
 if __name__ == "__main__":

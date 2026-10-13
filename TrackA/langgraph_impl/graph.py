@@ -36,7 +36,7 @@ def route_after_gate(state: GraphState) -> str:
 
 def retrieval_node(state: GraphState) -> GraphState:
     ps = state["patient_state"]
-    query = f"patient {ps.patient_id} history {ps.maladie or ''}"
+    query = retrieval_client.build_query(ps)
     state["retrieved"] = retrieval_client.search(query, patient_id=ps.patient_id)
     return state
 

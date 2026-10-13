@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 from kafka import KafkaConsumer, KafkaProducer
 
+# Allow `python tiers/context_agent.py` as well as `python -m tiers.context_agent`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-BOOTSTRAP_SERVERS = "localhost:9092"
+BOOTSTRAP_SERVERS = os.environ.get("BOOTSTRAP_SERVERS", "localhost:9092")
 INPUT_TOPICS = ("smarthome-context", "device-connectivity", "patient-profile")
 OUTPUT_TOPIC = "patient-context"
 
@@ -61,6 +66,14 @@ def main() -> None:
         value_serializer=lambda value: json.dumps(value).encode("utf-8"),
     )
     agent = ContextAgent()
+
+    # Rebuild the merged context from retained history, so the first event
+    # after a restart is published with the full context, not an empty one.
+    from tiers.kafka_replay import replay_topics
+
+    restored = replay_topics(BOOTSTRAP_SERVERS, INPUT_TOPICS, agent.update)
+    print(f"Context agent restored {restored} retained event(s).")
+
     for message in consumer:
         result = agent.update(message.topic, message.value)
         if result:

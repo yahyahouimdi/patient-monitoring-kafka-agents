@@ -25,7 +25,20 @@ class Settings:
     # Track B's retrieval service
     RETRIEVAL_SERVICE_URL = os.environ.get("RETRIEVAL_SERVICE_URL", "http://127.0.0.1:8000/search")
     RETRIEVAL_TIMEOUT_S = float(os.environ.get("RETRIEVAL_TIMEOUT_S", "2.0"))
-    RETRIEVAL_K = int(os.environ.get("RETRIEVAL_K", "2"))
+    # Room for the patient's own profile plus a few general clinical notes.
+    RETRIEVAL_K = int(os.environ.get("RETRIEVAL_K", "4"))
+
+    # A Tier 1 alarm counts as "active" for this long. Tier 1 repeats the
+    # alarm of a persisting condition every 30 s, so an alarm older than
+    # this window belongs to an episode that has ended.
+    ALARM_ACTIVE_WINDOW_S = float(os.environ.get("ALARM_ACTIVE_WINDOW_S", "120"))
+
+    # Tier 2 re-reasons about an unchanged situation at most this often.
+    REASON_COOLDOWN_S = float(os.environ.get("REASON_COOLDOWN_S", "60"))
+
+    # Reasoning runs on a worker pool so one slow model call cannot stall
+    # the Kafka consumer or the other patients.
+    TIER2_WORKERS = int(os.environ.get("TIER2_WORKERS", "4"))
 
     # Durable JSONL copy consumed by Track B's read-only request service.
     _DEFAULT_REQUEST_LOG = str(Path(__file__).resolve().parents[2] / "TrackB" / "docs" / "network_requests.jsonl")
